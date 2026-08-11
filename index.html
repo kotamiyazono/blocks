@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+<meta name="description" content="2人で遊ぶブロック配置ゲーム。ひとりでCPU対戦、向かい合わせで対面対戦、URLを送るだけでオンライン対戦。">
+<meta name="theme-color" content="#FAFAFB" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0F1114" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<title>BLOCKS</title>
+<link rel="stylesheet" href="./styles.css">
+<link rel="icon" href="./icon.svg" type="image/svg+xml">
+</head>
+<body>
+
+<!-- ========== ホーム ========== -->
+<section class="screen is-active" id="screen-home">
+  <div class="home-inner">
+    <div class="logo" aria-hidden="true">
+      <i class="chip chip-a"></i><i class="chip chip-b"></i>
+    </div>
+    <h1 class="wordmark">BLOCKS</h1>
+    <p class="tagline">角でつなげて、広げていく陣取りゲーム</p>
+
+    <div class="menu">
+      <button class="btn btn-primary" data-mode="solo">ひとりで遊ぶ</button>
+      <button class="btn" data-mode="local">対面で遊ぶ</button>
+      <button class="btn" data-mode="online">オンラインで遊ぶ</button>
+    </div>
+
+    <button class="link-btn" id="btn-rules">遊び方</button>
+  </div>
+</section>
+
+<!-- ========== ひとりで遊ぶ: 設定 ========== -->
+<section class="screen" id="screen-solo">
+  <div class="setup-inner">
+    <h2 class="setup-title">ひとりで遊ぶ</h2>
+
+    <div class="field">
+      <span class="field-label">CPU の強さ</span>
+      <div class="segmented" id="level-picker" role="radiogroup" aria-label="CPU の強さ">
+        <button role="radio" data-level="easy">やさしい</button>
+        <button role="radio" data-level="normal" aria-checked="true" class="is-on">ふつう</button>
+        <button role="radio" data-level="hard">つよい</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <span class="field-label">手番</span>
+      <div class="segmented" id="side-picker" role="radiogroup" aria-label="手番">
+        <button role="radio" data-side="1" aria-checked="true" class="is-on">先手（むらさき）</button>
+        <button role="radio" data-side="2">後手（オレンジ）</button>
+      </div>
+    </div>
+
+    <div class="setup-actions">
+      <button class="btn btn-primary" id="btn-solo-start">はじめる</button>
+      <button class="link-btn" data-back>もどる</button>
+    </div>
+  </div>
+</section>
+
+<!-- ========== オンライン: 入口 ========== -->
+<section class="screen" id="screen-online">
+  <div class="setup-inner">
+    <h2 class="setup-title">オンラインで遊ぶ</h2>
+    <p class="setup-note">部屋を作ると招待URLができます。相手に送って、開いてもらうだけで対戦がはじまります。</p>
+
+    <div class="setup-actions">
+      <button class="btn btn-primary" id="btn-create-room">部屋を作る</button>
+      <button class="link-btn" data-back>もどる</button>
+    </div>
+
+    <p class="error" id="online-error" role="alert"></p>
+  </div>
+</section>
+
+<!-- ========== オンライン: 相手を待つ ========== -->
+<section class="screen" id="screen-waiting">
+  <div class="setup-inner">
+    <h2 class="setup-title">相手を待っています</h2>
+
+    <div class="waiting-dots" aria-hidden="true"><i></i><i></i><i></i></div>
+
+    <button class="btn btn-primary" id="btn-share">招待URLを送る</button>
+    <button class="btn" id="btn-copy">URLをコピー</button>
+
+    <input class="url-field" id="invite-url" readonly hidden aria-label="招待URL">
+
+    <p class="setup-note" id="waiting-note">相手がURLを開くと自動ではじまります。この画面のままお待ちください。</p>
+
+    <button class="link-btn" id="btn-cancel-room">部屋を閉じる</button>
+  </div>
+</section>
+
+<!-- ========== オンライン: 参加中 ========== -->
+<section class="screen" id="screen-joining">
+  <div class="setup-inner">
+    <div class="waiting-dots" aria-hidden="true"><i></i><i></i><i></i></div>
+    <p class="setup-note" id="joining-note">部屋に参加しています…</p>
+    <p class="error" id="joining-error" role="alert"></p>
+    <button class="link-btn" data-back hidden id="btn-joining-back">ホームへ</button>
+  </div>
+</section>
+
+<!-- ========== 対局画面 ========== -->
+<section class="screen screen-game" id="screen-game">
+
+  <!-- 向こう側のプレイヤー（対面対戦のときだけ表示。180°回転して相手から正しく見える） -->
+  <div class="panel panel-far" data-owner="far" hidden>
+    <div class="controls">
+      <button class="ctl ctl-ghost" data-act="flip" aria-label="反転">
+        <span class="ctl-icon">⇄</span><span class="ctl-label">反転</span>
+      </button>
+      <button class="ctl ctl-place" data-act="place">置く</button>
+      <button class="ctl ctl-ghost" data-act="rotate" aria-label="回転">
+        <span class="ctl-icon">↻</span><span class="ctl-label">回転</span>
+      </button>
+    </div>
+    <div class="tray" role="listbox" aria-label="持ちピース"></div>
+  </div>
+
+  <!-- 盤面 -->
+  <div class="board-area">
+    <header class="hud">
+      <button class="icon-btn" id="btn-quit" aria-label="対局をやめる">✕</button>
+      <div class="scores">
+        <div class="score" data-player="1">
+          <i class="chip chip-a"></i>
+          <span class="score-name">先手</span>
+          <span class="score-num">89</span>
+        </div>
+        <div class="score" data-player="2">
+          <i class="chip chip-b"></i>
+          <span class="score-name">後手</span>
+          <span class="score-num">89</span>
+        </div>
+      </div>
+      <button class="icon-btn" id="btn-undo" aria-label="待った" hidden>↶</button>
+    </header>
+
+    <div class="board-frame">
+      <div class="board" id="board" role="grid" aria-label="盤面"></div>
+    </div>
+
+    <p class="status" id="status"></p>
+  </div>
+
+  <!-- 手前のプレイヤー -->
+  <div class="panel panel-near" data-owner="near">
+    <div class="controls">
+      <button class="ctl ctl-ghost" data-act="flip" aria-label="反転">
+        <span class="ctl-icon">⇄</span><span class="ctl-label">反転</span>
+      </button>
+      <button class="ctl ctl-place" data-act="place">置く</button>
+      <button class="ctl ctl-ghost" data-act="rotate" aria-label="回転">
+        <span class="ctl-icon">↻</span><span class="ctl-label">回転</span>
+      </button>
+    </div>
+    <div class="tray" role="listbox" aria-label="持ちピース"></div>
+  </div>
+</section>
+
+<!-- ========== 遊び方 ========== -->
+<div class="sheet" id="sheet-rules" hidden>
+  <div class="sheet-card" role="dialog" aria-modal="true" aria-labelledby="rules-title">
+    <h2 class="sheet-title" id="rules-title">遊び方</h2>
+    <ol class="rules-list">
+      <li><b>最初の一手</b>は、自分の色の印があるマスを必ず覆うように置きます。</li>
+      <li>２手目からは、<b>自分の駒と角が触れる</b>ように置きます。</li>
+      <li><b>自分の駒と辺で接してはいけません。</b>相手の駒とは辺で接して構いません。</li>
+      <li>置ける場所が無くなった人は自動的に飛ばされます。両方が置けなくなったら終了。</li>
+      <li><b>手元に残ったマスが少ないほうの勝ち</b>です。大きいピースから捌くのがコツ。</li>
+    </ol>
+    <h3 class="sheet-subtitle">操作</h3>
+    <ul class="rules-list">
+      <li>下のピースを<b>横に流して</b>選びます。真ん中に来たものが今のピース。</li>
+      <li>盤の上を<b>なぞって</b>置く場所を決めます。</li>
+      <li>駒を<b>タップで回転</b>、<b>長押しで反転</b>。タップだけで全部の向きを一巡できます。</li>
+    </ul>
+    <button class="btn btn-primary" data-close-sheet>とじる</button>
+  </div>
+</div>
+
+<!-- ========== 結果 ========== -->
+<div class="sheet" id="sheet-result" hidden>
+  <div class="sheet-card" role="dialog" aria-modal="true" aria-labelledby="result-title">
+    <p class="result-badge" id="result-badge">RESULT</p>
+    <h2 class="sheet-title" id="result-title">結果</h2>
+
+    <div class="result-rows">
+      <div class="result-row" data-player="1">
+        <i class="chip chip-a"></i>
+        <span class="result-name">先手</span>
+        <b class="result-num">0</b>
+      </div>
+      <div class="result-row" data-player="2">
+        <i class="chip chip-b"></i>
+        <span class="result-name">後手</span>
+        <b class="result-num">0</b>
+      </div>
+    </div>
+    <p class="result-hint">残りマスが少ないほうの勝ち</p>
+
+    <button class="btn btn-primary" id="btn-rematch">もう一度</button>
+    <button class="link-btn" id="btn-home">ホームへ</button>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script type="module" src="./js/app.js"></script>
+</body>
+</html>

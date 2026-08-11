@@ -1,0 +1,14 @@
+{
+  "name": "blocks",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "角でつなげて広げる2人用ブロック配置ゲーム。ひとり／対面／オンラインで遊べる。",
+  "scripts": {
+    "dev": "vercel dev",
+    "test": "node test/rules.test.mjs"
+  },
+  "dependencies": {
+    "@vercel/blob": "^2.0.0"
+  }
+}
