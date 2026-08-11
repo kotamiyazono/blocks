@@ -14,6 +14,7 @@ import { cellFromPoint, centeredPiece, centerPiece, updateTrayFocus } from './vi
 import { state, canAct, currentGhost } from './session.js';
 import { $, $$, onGameScreen, toast } from './ui.js';
 import {
+  render,
   updateBoard,
   setTrayTapHandler,
   trayOfPanel,
@@ -149,9 +150,12 @@ function setupBoard() {
   let drag = null;
 
   const moveGhostTo = (rc) => {
+    // 初めて盤に置いた瞬間だけ、下の案内も言い換わるので全体を描き直す
+    const first = !state.sel.anchor;
     state.sel.anchor = rc;
     state.lastAnchor = rc;
-    updateBoard();
+    if (first) render();
+    else updateBoard();
   };
 
   board.addEventListener('pointerdown', (event) => {

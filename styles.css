@@ -365,7 +365,14 @@ body.mode-local .board-area { padding-top: 0; }
   transform: rotate(180deg);
   padding-bottom: calc(4px + env(safe-area-inset-top));
 }
-.panel-near { padding-bottom: calc(8px + env(safe-area-inset-bottom)); }
+.panel-near { padding-bottom: max(18px, calc(8px + env(safe-area-inset-bottom))); }
+
+/* ホーム画面から起動したときは、下端の指の届きにくさが増すので余白を厚くする。
+   env() が 0 を返す端末でも詰まらないよう max() で最低限を保証している。 */
+@media (display-mode: standalone), (display-mode: fullscreen) {
+  .panel-near { padding-bottom: max(30px, calc(18px + env(safe-area-inset-bottom))); }
+  .panel-far { padding-bottom: max(14px, calc(6px + env(safe-area-inset-top))); }
+}
 .panel.is-idle { opacity: .3; pointer-events: none; }
 
 .ctl {

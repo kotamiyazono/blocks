@@ -6,13 +6,10 @@
  */
 
 import {
-  START,
-  anchorForCells,
   canPlace,
   cellsAtAnchor,
   isFirstMove,
   legalMoves,
-  orientationIndexOf,
 } from './rules.js';
 import { DEFAULT_FIRST, isColor, partnerFor } from './palette.js';
 
@@ -24,7 +21,7 @@ export const state = {
   side: 1,             // ひとりプレーで自分が選んだ手番
   sel: null,           // { pieceId, oi, anchor }
   selTurn: null,       // 選択がどの手番のものか（手番が変わったら捨てる）
-  lastAnchor: null,    // 次のピースを近くに出すための手がかり
+  lastAnchor: null,    // 矢印キーで動かすときの起点
   history: [],         // 待った用（ひとり／対面のみ）
   placeable: null,     // { key, set } 置けるピースの一覧をキャッシュ
   busy: false,         // 送信中はボタンを止める
@@ -117,37 +114,15 @@ export function placeableSet() {
 }
 
 /**
- * 選ばれたピースを、置ける場所のうち直前に触っていた位置のいちばん近くに出す。
- * 画面には触らないので、呼んだ側で描き直す。
+ * 持つピースを持ち替える。
+ *
+ * 置き場所はあえて決めない。ここで「置ける場所」を先回りして出すと、
+ * 手番が来た瞬間から確定できる状態になってしまい、
+ * 考えずに「置く」を押すだけで進んでしまう。どこに置くかは打つ人が決める。
  */
 export function computeSelection(pieceId) {
-  const g = state.game;
-  const p = g.turn;
-  const moves = legalMoves(g.board, p, [pieceId], isFirstMove(g, p));
-  state.selTurn = p;
-
-  if (moves.length === 0) {
-    state.sel = { pieceId, oi: 0, anchor: null };
-    return;
-  }
-
-  const ref = state.lastAnchor || (g.lastMove ? anchorForCells(g.lastMove.cells) : START[p]);
-  let best = moves[0];
-  let bestDistance = Infinity;
-  for (const move of moves) {
-    const [r, c] = anchorForCells(move.cells);
-    const distance = Math.abs(r - ref[0]) + Math.abs(c - ref[1]);
-    if (distance < bestDistance) {
-      bestDistance = distance;
-      best = move;
-    }
-  }
-
-  state.sel = {
-    pieceId,
-    oi: orientationIndexOf(pieceId, best.cells),
-    anchor: anchorForCells(best.cells),
-  };
+  state.selTurn = state.game.turn;
+  state.sel = { pieceId, oi: 0, anchor: null };
 }
 
 /** 仮置きの見た目。置けない位置でも出して、なぜ置けないか分かるようにする。 */

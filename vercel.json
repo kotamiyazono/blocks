@@ -8,7 +8,7 @@
       ]
     },
     {
-      "source": "/(.*)\\.(js|css|html|svg)",
+      "source": "/(.*)\\.(js|css|html|svg|json|png)",
       "headers": [
         { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
       ]
