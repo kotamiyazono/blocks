@@ -263,8 +263,8 @@ body.mode-local .board-area { padding-top: 0; }
   user-select: none;
 }
 /* 20×20 はマスが細かいので、隙間と角丸を控えめにして 1 マスを大きく見せる */
-.board[style*="repeat(20"] { gap: 1.5px; }
-.board[style*="repeat(20"] .cell { border-radius: 2px; }
+.board[data-size="20"] { gap: 1.5px; }
+.board[data-size="20"] .cell { border-radius: 2px; }
 
 .cell { background: var(--cell); border-radius: 2.5px; position: relative; }
 

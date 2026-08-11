@@ -332,7 +332,7 @@ function wireButtons() {
     el.onlineError.textContent = '';
 
     try {
-      const data = await createRoom(state.seats);
+      const data = await createRoom(state.seatChoice);
       rememberSeat(data);
 
       el.inviteUrl.value = inviteUrlFor(data.code);

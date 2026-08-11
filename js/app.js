@@ -256,7 +256,7 @@ async function goHome() {
 
 /** ひとりプレーの設定。4 人戦のときは自分が先手で、残り 3 席を CPU が持つ。 */
 function soloSetup() {
-  const seats = state.seats === 4 ? 4 : 2;
+  const seats = state.seatChoice === 4 ? 4 : 2;
   const mySeat = seats === 4 ? 1 : state.side;
   const cpuSeats = [];
   for (let p = 1; p <= seats; p++) if (p !== mySeat) cpuSeats.push(p);
@@ -284,12 +284,12 @@ function wireSegmented(id, key, parse = String) {
 
 wireSegmented('#level-picker', 'level');
 wireSegmented('#side-picker', 'side', Number);
-wireSegmented('#solo-seats', 'seats', Number);
-wireSegmented('#online-seats', 'seats', Number);
+wireSegmented('#solo-seats', 'seatChoice', Number);
+wireSegmented('#online-seats', 'seatChoice', Number);
 
 /** 手番を選べるのは 2 人戦のときだけ（4 人戦は自分が先手で固定）。 */
 function syncSeatFields() {
-  $('#side-field').hidden = state.seats !== 2;
+  $('#side-field').hidden = state.seatChoice !== 2;
 }
 for (const id of ['#solo-seats', '#online-seats']) {
   $(id).addEventListener('click', syncSeatFields);
@@ -299,7 +299,7 @@ for (const id of ['#solo-seats', '#online-seats']) {
 function paintSeatPickers() {
   for (const id of ['#solo-seats', '#online-seats']) {
     for (const button of $$(`${id} button`)) {
-      const on = Number(button.dataset.value) === state.seats;
+      const on = Number(button.dataset.value) === state.seatChoice;
       button.classList.toggle('is-on', on);
       button.setAttribute('aria-checked', String(on));
     }

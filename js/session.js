@@ -20,7 +20,8 @@ export const state = {
   myPlayer: 1,         // ひとり／オンラインで自分が受け持つ席
   level: 'normal',     // CPU の強さ
   side: 1,             // ひとりプレーで自分が選んだ手番
-  seats: 2,            // 人数（2 または 4）
+  seatChoice: 2,       // これから始める人数（設定画面での選択）
+  seats: 2,            // 今の対局の人数（対局から決まる）
   cpuSeats: [],        // CPU が受け持つ席
   sel: null,           // { pieceId, oi, anchor }
   selTurn: null,       // 選択がどの手番のものか（手番が変わったら捨てる）

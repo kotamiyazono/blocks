@@ -12,7 +12,7 @@ const BOARD_PADDING = 0;
 /** 盤のマスを一度だけ作る。以降はクラスの付け替えだけで更新する。 */
 export function buildBoard(el, variant) {
   const size = variant.size;
-  el.style.setProperty('--board-size', String(size));
+  el.dataset.size = String(size); // スタイル側がマスの細かさを見分けるのに使う
   el.style.gridTemplateColumns = `repeat(${size}, 1fr)`;
 
   const frag = document.createDocumentFragment();
