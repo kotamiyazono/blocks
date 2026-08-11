@@ -482,6 +482,7 @@ body.mode-local .score { padding: 3px 9px; }
   flex-direction: column;
   gap: 3px;
 }
+#chat-them-rows { display: flex; flex-direction: column; gap: 3px; }
 .chat[hidden] { display: none; }
 
 .chat-line {

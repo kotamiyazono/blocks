@@ -23,6 +23,7 @@ import { chooseMove } from './ai.js';
 import {
   state,
   choice,
+  labelFor,
   rememberMyColor,
   saveRoom,
   loadRoom,
@@ -45,9 +46,7 @@ const el = {
   startNow: $('#btn-start-now'),
   chat: $('#chat'),
   chatInput: $('#chat-input'),
-  chatThem: $('#chat-them'),
-  chatThemText: $('#chat-them-text'),
-  chatThemChip: $('#chat-them-chip'),
+  chatThemRows: $('#chat-them-rows'),
   chatMyChip: $('#chat-my-chip'),
 };
 
@@ -246,40 +245,32 @@ export async function placeOnline(pieceId, cells) {
    送信という区切りを持たず、打っている文字がそのまま相手に流れていく。
    ========================================================================== */
 
-const CHAT_PLACEHOLDER = '相手のひとこと';
-
 let chatTimer = null;
 let chatPending = null;
+let lastChat = {};
 
 /**
  * 相手の行を今の内容に合わせる。自分の入力欄には触らない。
  * 空でも行そのものは残す。消すと高さが変わって盤面が伸び縮みしてしまう。
  */
-let lastChat = {};
-
 function renderChat(chat) {
   if (!chat || !state.online) return;
 
-  // 自分以外で、直前に変わった人の行を出す。誰も動いていなければ今出している人のまま。
-  const others = Object.keys(chat).map(Number).filter((p) => p !== state.myPlayer);
-  const changed = others.find((p) => (chat[p] || '') !== (lastChat[p] || ''));
-  lastChat = { ...chat };
+  let someoneTyped = false;
+  for (const row of el.chatThemRows.children) {
+    const seat = Number(row.dataset.seat);
+    const text = (chat[seat] || '').trim();
 
-  let speaker = changed || Number(el.chatThem.dataset.speaker) || 0;
-  if (!speaker || !(chat[speaker] || '').trim()) {
-    speaker = others.find((p) => (chat[p] || '').trim()) || others[0];
-  }
-  const text = (chat[speaker] || '').trim();
+    if (text !== (lastChat[seat] || '')) someoneTyped = true;
+    lastChat[seat] = text;
 
-  if (changed) {
-    // 誰かが打ち込んでいる間は見に行く間隔を詰めて、文字が流れて見えるようにする
-    if (state.online.watcher) state.online.watcher.hurry();
+    row.classList.toggle('is-empty', text.length === 0);
+    // 何も言っていない席は、誰の行なのかが分かるように名前を薄く出しておく
+    row.querySelector('span').textContent = text || labelFor(seat);
   }
 
-  el.chatThem.dataset.speaker = String(speaker);
-  el.chatThemChip.className = `chip seat-${speaker}`;
-  el.chatThem.classList.toggle('is-empty', text.length === 0);
-  el.chatThemText.textContent = text || CHAT_PLACEHOLDER;
+  // 誰かが打ち込んでいる間は見に行く間隔を詰めて、文字が流れて見えるようにする
+  if (someoneTyped && state.online.watcher) state.online.watcher.hurry();
 }
 
 function wireChat() {
@@ -310,19 +301,38 @@ async function flushChat() {
 }
 
 /** 対局の開始時に、ひとこと欄を出すか下げるかを決める。 */
+/**
+ * 対局の開始時に、ひとこと欄を組み直す。
+ * 相手ひとりにつき 1 行。CPU の席は喋らないので行を作らない。
+ */
 export function prepareChat(mode, myPlayer) {
   clearTimeout(chatTimer);
   chatPending = null;
   lastChat = {};
   el.chatInput.value = '';
-  el.chatThem.dataset.speaker = '';
-  el.chatThem.classList.add('is-empty');
-  el.chatThemText.textContent = CHAT_PLACEHOLDER;
 
   el.chat.hidden = mode !== 'online';
   if (mode !== 'online') return;
+
   el.chatMyChip.className = `chip seat-${myPlayer}`;
-  el.chatThemChip.className = 'chip';
+
+  const rows = document.createDocumentFragment();
+  for (let seat = 1; seat <= state.seats; seat++) {
+    if (seat === myPlayer || state.cpuSeats.includes(seat)) continue;
+
+    const row = document.createElement('p');
+    row.className = 'chat-line chat-them is-empty';
+    row.dataset.seat = String(seat);
+
+    const chip = document.createElement('i');
+    chip.className = `chip seat-${seat}`;
+    const text = document.createElement('span');
+    text.textContent = labelFor(seat);
+
+    row.append(chip, text);
+    rows.appendChild(row);
+  }
+  el.chatThemRows.replaceChildren(rows);
 }
 
 /* ==========================================================================
