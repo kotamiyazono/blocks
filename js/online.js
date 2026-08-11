@@ -45,6 +45,7 @@ export const joinRoom = (code) => post('join', { code });
 export const sendMove = (code, token, pieceId, cells) => post('move', { code, token, pieceId, cells });
 export const leaveRoom = (code, token) => post('leave', { code, token });
 export const requestRematch = (code, token) => post('rematch', { code, token });
+export const sendChat = (code, token, text) => post('say', { code, token, text });
 
 export const fetchRoom = (code, since) => {
   const params = new URLSearchParams({ code });
@@ -58,6 +59,7 @@ export class RoomWatcher {
   #stopped = true;
   #misses = 0;
   #quietSince = 0;
+  #hurryUntil = 0;
 
   /**
    * @param {object} options
@@ -89,12 +91,22 @@ export class RoomWatcher {
     document.removeEventListener('visibilitychange', this.onVisibility);
   }
 
-  /** 相手を待っている間は 1.2 秒、動きが無い時間が続いたら最大 6 秒まで緩める。 */
+  /**
+   * やりとりが続いている間だけ間隔を詰める。
+   * ひとことを打ち合っている最中は文字が流れて見えるように、いちばん短くする。
+   */
   #interval() {
+    if (Date.now() < this.#hurryUntil) return 550;
     const quiet = Date.now() - this.#quietSince;
     if (quiet < 20_000) return 1200;
     if (quiet < 60_000) return 2500;
     return 6000;
+  }
+
+  /** しばらく見に行く間隔を詰める（会話中に使う）。 */
+  hurry(ms = 12_000) {
+    this.#hurryUntil = Date.now() + ms;
+    if (!this.#stopped) this.#schedule(0);
   }
 
   #schedule(delay) {

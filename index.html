@@ -148,6 +148,19 @@
     <p class="status" id="status"></p>
   </div>
 
+  <!-- ひとこと（オンライン対戦のときだけ。打った文字がそのまま相手に見える） -->
+  <div class="chat" id="chat" hidden>
+    <p class="chat-line chat-them" id="chat-them" hidden>
+      <i class="chip" id="chat-them-chip"></i><span id="chat-them-text"></span>
+    </p>
+    <div class="chat-line chat-mine">
+      <i class="chip" id="chat-my-chip"></i>
+      <input id="chat-input" type="text" maxlength="140" autocomplete="off"
+             enterkeyhint="done" aria-label="ひとこと"
+             placeholder="ひとこと（打った文字がそのまま相手に見えます）">
+    </div>
+  </div>
+
   <!-- 手前のプレイヤー -->
   <div class="panel panel-near" data-owner="near">
     <div class="controls">

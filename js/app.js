@@ -40,6 +40,7 @@ import {
   sendMove,
   leaveRoom,
   requestRematch,
+  sendChat,
   RoomWatcher,
 } from './online.js';
 
@@ -90,6 +91,12 @@ const el = {
   joiningBack: $('#btn-joining-back'),
   waitingNote: $('#waiting-note'),
   rematch: $('#btn-rematch'),
+  chat: $('#chat'),
+  chatInput: $('#chat-input'),
+  chatThem: $('#chat-them'),
+  chatThemText: $('#chat-them-text'),
+  chatThemChip: $('#chat-them-chip'),
+  chatMyChip: $('#chat-my-chip'),
 };
 
 function showScreen(id) {
@@ -628,6 +635,8 @@ el.board.addEventListener('pointercancel', endDrag);
 document.addEventListener('keydown', (event) => {
   if (!$('#screen-game').classList.contains('is-active')) return;
   if (event.metaKey || event.ctrlKey || event.altKey) return;
+  // ひとことを打っている最中は、盤の操作キーとして横取りしない
+  if (event.target instanceof HTMLInputElement) return;
 
   const keys = {
     ArrowUp: () => moveAnchor(-1, 0),
@@ -681,6 +690,14 @@ function beginGame(mode, options = {}) {
 
   document.body.classList.remove('mode-solo', 'mode-local', 'mode-online');
   document.body.classList.add(`mode-${mode}`);
+
+  // ひとことはオンライン対戦のときだけ
+  resetChat();
+  el.chat.hidden = mode !== 'online';
+  if (mode === 'online') {
+    el.chatMyChip.className = `chip chip-${state.myPlayer === 1 ? 'a' : 'b'}`;
+    el.chatThemChip.className = `chip chip-${state.myPlayer === 1 ? 'b' : 'a'}`;
+  }
 
   buildBoard(el.board);
   el.sheetResult.hidden = true;
@@ -800,14 +817,76 @@ function onRoomUpdate(data) {
     return;
   }
 
+  // ひとことだけが動いたときに、選びかけのピースまで捨ててしまわないようにする
+  const advanced = !previous
+    || previous.moveCount !== data.game.moveCount
+    || previous.turn !== data.game.turn
+    || previous.status !== data.game.status;
+
   state.game = data.game;
-  state.placeable = null;
-  state.sel = null;
-  state.selTurn = null;
+  if (advanced) {
+    state.placeable = null;
+    state.sel = null;
+    state.selTurn = null;
+  }
+
+  renderChat(data.chat);
   render();
 
+  if (!advanced) return;
   if (data.game.status === 'finished') showResult();
   else if (data.game.passedBy) notifyPass(data.game.passedBy);
+}
+
+/* ---- ひとこと ---- */
+
+/** 相手の行を今の内容に合わせる。自分の入力欄には触らない。 */
+function renderChat(chat) {
+  if (!chat || !state.online) return;
+  const theirs = (chat[state.myPlayer === 1 ? 2 : 1] || '').trim();
+
+  if (theirs !== el.chatThemText.textContent) {
+    el.chatThemText.textContent = theirs;
+    // 相手が打ち込んでいる間は見に行く間隔を詰めて、文字が流れて見えるようにする
+    if (state.online.watcher) state.online.watcher.hurry();
+  }
+  el.chatThem.hidden = theirs.length === 0;
+}
+
+let chatTimer = null;
+let chatPending = null;
+
+el.chatInput.addEventListener('input', () => {
+  if (state.mode !== 'online' || !state.online) return;
+  chatPending = el.chatInput.value;
+  if (state.online.watcher) state.online.watcher.hurry();
+  clearTimeout(chatTimer);
+  chatTimer = setTimeout(flushChat, 350);
+});
+
+el.chatInput.addEventListener('keydown', (event) => {
+  if (event.key !== 'Enter') return;
+  event.preventDefault();
+  el.chatInput.blur(); // 送信という区切りは無いので、キーボードを下げるだけ
+});
+
+async function flushChat() {
+  if (!state.online || chatPending === null) return;
+  const text = chatPending;
+  chatPending = null;
+  try {
+    onRoomUpdate(await sendChat(state.online.code, state.online.token, text));
+  } catch {
+    /* 届かなくても次に打った文字と一緒に送られる */
+  }
+}
+
+function resetChat() {
+  clearTimeout(chatTimer);
+  chatPending = null;
+  el.chatInput.value = '';
+  el.chatThemText.textContent = '';
+  el.chatThem.hidden = true;
 }
 
 async function placeOnline(pieceId, cells) {

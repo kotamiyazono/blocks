@@ -91,7 +91,29 @@ function publicView(room, seq) {
     status: room.status,
     hasOpponent: Boolean(room.tokens[1] && room.tokens[2]),
     game: room.game,
+    chat: room.chat || { 1: '', 2: '' },
   };
+}
+
+/**
+ * 書き込みが相手とぶつかったら、読み直して一度だけやり直す。
+ * ひとことは打つたびに書き込むので、着手と重なることがある。
+ */
+async function writeWithRetry(code, mutate) {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const found = await readRoom(code);
+    if (!found) return null;
+    try {
+      const result = mutate(found.room);
+      if (result === false) return found.room;
+      await writeRoom(found.room, found.etag);
+      return found.room;
+    } catch (error) {
+      if (error && error.name === 'BlobPreconditionFailedError') continue;
+      throw error;
+    }
+  }
+  return null;
 }
 
 const send = (res, status, body) => {
@@ -111,10 +133,11 @@ export default async function handler(req, res) {
       case 'create': return await handleCreate(res);
       case 'join':   return await handleJoin(res, body);
       case 'poll':   return await handlePoll(res, req.query);
-      case 'move':   return await handleMove(res, body);
+      case 'move':    return await handleMove(res, body);
+      case 'say':     return await handleSay(res, body);
       case 'rematch': return await handleRematch(res, body);
-      case 'leave':  return await handleLeave(res, body);
-      default:       return fail(res, 400, '不正なリクエストです');
+      case 'leave':   return await handleLeave(res, body);
+      default:        return fail(res, 400, '不正なリクエストです');
     }
   } catch (error) {
     // ifMatch 不一致（同時書き込み）はクライアントが読み直せば回復できる
@@ -147,6 +170,7 @@ async function handleCreate(res) {
     status: 'waiting',
     tokens: { 1: token, 2: null },
     game: createGame(),
+    chat: { 1: '', 2: '' },
   };
 
   await writeRoom(room, undefined);
@@ -216,6 +240,39 @@ async function handleMove(res, body) {
   if (room.game.status === 'finished') room.status = 'finished';
 
   await writeRoom(room, etag);
+  return send(res, 200, publicView(room));
+}
+
+/** ひとことの現在地を書き換える。履歴は持たず、部屋と一緒に消える。 */
+const CHAT_LIMIT = 140;
+
+async function handleSay(res, body) {
+  const code = String(body.code || '').toUpperCase();
+  const token = String(body.token || '');
+  // 改行や制御文字は 1 行表示が壊れるので落とす
+  const text = String(body.text ?? '')
+    .replace(/[\u0000-\u001F\u007F]/g, ' ')
+    .slice(0, CHAT_LIMIT);
+
+  if (code.length !== CODE_LENGTH) return fail(res, 400, '部屋コードが正しくありません');
+
+  const room = await writeWithRetry(code, (r) => {
+    const player = r.tokens[1] === token ? 1 : r.tokens[2] === token ? 2 : 0;
+    if (!player) {
+      const error = new Error('forbidden');
+      error.forbidden = true;
+      throw error;
+    }
+    if (!r.chat) r.chat = { 1: '', 2: '' };
+    if (r.chat[player] === text) return false; // 変わっていないなら書かない
+    r.chat[player] = text;
+  }).catch((error) => {
+    if (error && error.forbidden) return 'forbidden';
+    throw error;
+  });
+
+  if (room === 'forbidden') return fail(res, 403, 'この対局の参加者として確認できませんでした');
+  if (!room) return fail(res, 404, 'この部屋は閉じました');
   return send(res, 200, publicView(room));
 }
 

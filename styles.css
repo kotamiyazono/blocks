@@ -448,6 +448,61 @@ body.mode-local .ctl-place { min-width: 104px; }
 }
 
 /* --------------------------------------------------------------------------
+   ひとこと
+   送信という区切りを作らず、打っている文字がそのまま相手に流れていく。
+   残るのは「いま言っていること」だけで、履歴はどこにも持たない。
+   -------------------------------------------------------------------------- */
+.chat {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 2px 2px 4px;
+}
+.chat[hidden] { display: none; }
+
+.chat-line {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 9px;
+  font-size: 13px;
+  line-height: 1.35;
+}
+.chat-line .chip { width: 8px; height: 8px; border-radius: 2px; }
+
+.chat-them {
+  background: var(--surface-2);
+  color: var(--ink);
+  animation: chat-in .18s ease;
+}
+.chat-them[hidden] { display: none; }
+.chat-them span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@keyframes chat-in { from { opacity: 0; transform: translateY(3px); } }
+
+.chat-mine {
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+.chat-mine input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 0;
+}
+.chat-mine input:focus { outline: none; }
+.chat-mine input::placeholder { color: var(--mist); font-size: 12px; }
+
+/* --------------------------------------------------------------------------
    シート（遊び方・結果）
    -------------------------------------------------------------------------- */
 .sheet {
