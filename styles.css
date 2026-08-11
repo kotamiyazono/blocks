@@ -142,21 +142,6 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
 
 .error { color: rgb(var(--bad)); font-size: 13px; min-height: 20px; text-align: center; }
 
-/* 色見本 */
-.swatches { display: flex; gap: 10px; justify-content: space-between; }
-.swatch {
-  flex: 1;
-  aspect-ratio: 1;
-  max-width: 46px;
-  border-radius: 12px;
-  background: linear-gradient(158deg, rgb(var(--sw-hi)), rgb(var(--sw)) 58%, rgb(var(--sw-dp)));
-  box-shadow: inset 0 1px 1px rgb(255 255 255 / .5);
-  transition: transform .1s ease, opacity .12s ease;
-}
-.swatch:active { transform: scale(.92); }
-/* 選んでいる色は、地の色をひと回し挟んでから輪郭を出す */
-.swatch.is-on { box-shadow: inset 0 1px 1px rgb(255 255 255 / .5), 0 0 0 3px var(--bg), 0 0 0 5px var(--ink); }
-.swatch:disabled { opacity: .18; cursor: default; }
 
 /* --------------------------------------------------------------------------
    ホーム

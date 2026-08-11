@@ -17,18 +17,9 @@ import {
   requestRematch,
   RoomWatcher,
 } from './online.js';
-import { applyColors, buildSwatches, firstAvailable, fillColors } from './palette.js';
 import { chooseMove } from './ai.js';
 
-import {
-  state,
-  choice,
-  labelFor,
-  rememberMyColor,
-  saveRoom,
-  loadRoom,
-  clearRoom,
-} from './session.js';
+import { state, labelFor, saveRoom, loadRoom, clearRoom } from './session.js';
 import { $, showScreen, onGameScreen, toast } from './ui.js';
 import { render, updateBoard } from './render.js';
 
@@ -38,9 +29,7 @@ const el = {
   joiningNote: $('#joining-note'),
   joiningError: $('#joining-error'),
   joiningBack: $('#btn-joining-back'),
-  joiningColor: $('#joining-color'),
   joiningDots: $('#joining-dots'),
-  joinStart: $('#btn-join-start'),
   createRoom: $('#btn-create-room'),
   seatCount: $('#seat-count'),
   startNow: $('#btn-start-now'),
@@ -110,7 +99,6 @@ function onRoomUpdate(data) {
   // 盤面がまだ組み立てられていない画面（相手待ち・参加中）にいる場合
   if (!onGameScreen()) {
     if (data.status === 'waiting') {
-      applyColors(fillColors(data.colors, data.seats));
       paintWaiting(data);
       return; // まだ人が揃っていない
     }
@@ -156,7 +144,6 @@ function onRoomUpdate(data) {
 const startOnlineGame = (data) => hooks.beginGame('online', {
   game: data.game,
   myPlayer: state.online.player,
-  colors: data.colors,
   cpuSeats: data.cpu || [],
 });
 
@@ -345,9 +332,8 @@ function wireButtons() {
     el.onlineError.textContent = '';
 
     try {
-      const data = await createRoom(choice.mine, state.seats);
+      const data = await createRoom(state.seats);
       rememberSeat(data);
-      applyColors(fillColors(data.colors, data.seats)); // 待ち画面の色も選んだ色に
 
       el.inviteUrl.value = inviteUrlFor(data.code);
       paintWaiting(data);
@@ -378,8 +364,6 @@ function wireButtons() {
     showScreen('screen-home');
   });
 
-  el.joinStart.addEventListener('click', joinPendingRoom);
-
   el.startNow.addEventListener('click', async () => {
     el.startNow.disabled = true;
     try {
@@ -409,52 +393,35 @@ async function copyInvite() {
    招待から入る
    ========================================================================== */
 
-/** URL のうしろに付いた部屋コードから入る。再読み込みなら元の席に戻す。 */
+/**
+ * URL のうしろに付いた部屋コードから入る。再読み込みなら元の席に戻す。
+ * 色は席で決まっているので、開いたらそのまま席につく。
+ */
 export async function enterByCode(code) {
   showScreen('screen-joining');
   el.joiningError.textContent = '';
   el.joiningBack.hidden = true;
-  el.joinStart.hidden = true;
-  el.joiningColor.hidden = true;
   el.joiningDots.hidden = false;
-  el.joiningNote.textContent = '部屋を確かめています…';
+  el.joiningNote.textContent = '部屋に入っています…';
 
   if (await resumeSeat(code)) return;
 
-  // 先に入っている人が使っている色を確かめてから、自分の色を選んでもらう
-  let taken = [];
-  let waitingFor = 0;
   try {
-    const room = await fetchRoom(code);
-    if (room.status !== 'waiting' || room.hasOpponent) {
-      throw new Error('この部屋はもう席が埋まっています');
+    const data = await joinRoom(code);
+    rememberSeat(data);
+
+    if (data.status === 'waiting') {
+      // 4 人戦でまだ揃っていない。他の人を待つ
+      el.inviteUrl.value = inviteUrlFor(code);
+      paintWaiting(data);
+      showScreen('screen-waiting');
+    } else {
+      startOnlineGame(data);
     }
-    // 既に入っている席の色は取れない
-    taken = Array.from({ length: room.joined }, (_, i) => room.colors?.[i + 1]).filter(Boolean);
-    waitingFor = room.seats;
+    startWatcher();
   } catch (error) {
     showJoinError(error.message);
-    return;
   }
-
-  // 使われている色を選んでいたら、空いている色にずらしておく
-  if (taken.includes(choice.mine)) rememberMyColor(firstAvailable(taken));
-
-  const paint = () => buildSwatches($('#join-colors'), {
-    selected: choice.mine,
-    taken,
-    onPick: (picked) => { rememberMyColor(picked); paint(); },
-  });
-  paint();
-
-  el.joiningDots.hidden = true;
-  el.joiningNote.textContent = waitingFor > 2
-    ? `${waitingFor} 人対戦です。色を選んで席についてください。`
-    : '相手が待っています。色を選んではじめてください。';
-  el.joiningColor.hidden = false;
-  el.joinStart.hidden = false;
-  el.joinStart.disabled = false;
-  state.pendingJoin = code;
 }
 
 /** すでにこの部屋の参加者なら、入り直さずに続きから。 */
@@ -468,7 +435,6 @@ async function resumeSeat(code) {
     state.myPlayer = saved.player;
 
     if (data.status === 'waiting') {
-      applyColors(fillColors(data.colors, data.seats));
       el.inviteUrl.value = inviteUrlFor(code);
       paintWaiting(data);
       showScreen('screen-waiting');
@@ -479,39 +445,6 @@ async function resumeSeat(code) {
     return true;
   } catch {
     return false; // 続きから入れなければ、新規参加として扱う
-  }
-}
-
-async function joinPendingRoom() {
-  const code = state.pendingJoin;
-  if (!code) return;
-
-  el.joinStart.disabled = true;
-  el.joiningError.textContent = '';
-
-  try {
-    const data = await joinRoom(code, choice.mine);
-    rememberSeat(data);
-    state.pendingJoin = null;
-
-    if (data.status === 'waiting') {
-      // 4 人戦でまだ揃っていない。他の人を待つ
-      applyColors(fillColors(data.colors, data.seats));
-      el.inviteUrl.value = inviteUrlFor(code);
-      paintWaiting(data);
-      showScreen('screen-waiting');
-    } else {
-      startOnlineGame(data);
-    }
-    startWatcher();
-  } catch (error) {
-    el.joiningError.textContent = error.message;
-    el.joinStart.disabled = false;
-    if (error.status === 409 || error.status === 404) {
-      el.joinStart.hidden = true;
-      el.joiningColor.hidden = true;
-      el.joiningBack.hidden = false;
-    }
   }
 }
 

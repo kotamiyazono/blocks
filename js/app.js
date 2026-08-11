@@ -21,17 +21,8 @@ import {
   isFirstMove, result, variantOf,
 } from './rules.js';
 import { chooseMove } from './ai.js';
-import { applyColors, buildSwatches, fillColors } from './palette.js';
 import { buildBoard } from './view.js';
-import {
-  state,
-  choice,
-  canAct,
-  labelFor,
-  isCpuSeat,
-  rememberMyColor,
-  rememberLocalColors,
-} from './session.js';
+import { state, canAct, labelFor, isCpuSeat } from './session.js';
 import { $, $$, showScreen, toast } from './ui.js';
 import { render } from './render.js';
 import { initInput } from './input.js';
@@ -62,11 +53,6 @@ function beginGame(mode, options = {}) {
   state.game = options.game || createGame(options.variant);
   state.seats = variantOf(state.game).players;
   state.cpuSeats = options.cpuSeats || [];
-  state.colors = fillColors(options.colors, state.seats);
-
-  // 色は見た目だけの話なので、盤を組む前に当てておけば以降どこにも影響しない
-  applyColors(state.colors);
-
   state.myPlayer = options.myPlayer || 1;
   state.sel = null;
   state.selTurn = null;
@@ -236,7 +222,7 @@ rematchButton.addEventListener('click', async () => {
     return;
   }
   if (state.mode === 'local') {
-    beginGame('local', { colors: { ...choice.local } });
+    beginGame('local');
     return;
   }
 
@@ -279,7 +265,6 @@ function soloSetup() {
     variant: seats === 4 ? VARIANTS.four.id : VARIANTS.duo.id,
     myPlayer: mySeat,
     cpuSeats,
-    colors: { [mySeat]: choice.mine },
   };
 }
 
@@ -322,41 +307,8 @@ function paintSeatPickers() {
   syncSeatFields();
 }
 
-/** 自分の色を選ぶ見本（ひとり・オンライン共通）。 */
-function renderMyColorPickers() {
-  for (const id of ['#solo-colors', '#online-colors']) {
-    buildSwatches($(id), {
-      selected: choice.mine,
-      onPick: (picked) => {
-        rememberMyColor(picked);
-        renderMyColorPickers();
-      },
-    });
-  }
-}
-
-/** 対面での先手・後手の色。同じ色を選んだら入れ替える。 */
-function renderLocalColorPickers() {
-  for (const player of [1, 2]) {
-    buildSwatches($(`#local-colors-${player}`), {
-      selected: choice.local[player],
-      onPick: (picked) => {
-        const other = player === 1 ? 2 : 1;
-        if (choice.local[other] === picked) choice.local[other] = choice.local[player];
-        choice.local[player] = picked;
-        rememberLocalColors();
-        renderLocalColorPickers();
-      },
-    });
-  }
-}
-
 $('#btn-solo-start').addEventListener('click', () => {
   beginGame('solo', soloSetup());
-});
-
-$('#btn-local-start').addEventListener('click', () => {
-  beginGame('local', { colors: { ...choice.local } });
 });
 
 /* ========================================================================
@@ -367,11 +319,10 @@ for (const button of $$('[data-mode]')) {
   button.addEventListener('click', () => {
     const mode = button.dataset.mode;
     if (mode === 'local') {
-      renderLocalColorPickers();
-      showScreen('screen-local');
+      beginGame('local');
+      toast('端末を机に置いて、向かい合わせに座ってください', 4000);
     } else {
       paintSeatPickers();
-      renderMyColorPickers();
       showScreen(mode === 'solo' ? 'screen-solo' : 'screen-online');
     }
   });
@@ -411,9 +362,6 @@ for (const button of $$('.js-quit')) {
 
 initInput({ place: placeSelection, undo });
 initRoom({ beginGame, goHome, showResult, notifyPass, hideResult });
-
-// ホームの印も前回選んだ色で出す
-applyColors(fillColors({ 1: choice.mine }, 4));
 
 const invited = location.hash.replace('#', '').trim().toUpperCase();
 if (/^[A-Z0-9]{4}$/.test(invited)) enterByCode(invited);

@@ -4,8 +4,8 @@
  * 対局中の盤面だけをプライベートな Blob に置き、終わったら消す。
  * 勝敗も棋譜もプレイヤー情報も残さない。部屋は 2 時間触られなければ自動で消える。
  *
- *   POST /api/room?action=create  { color }        → 部屋を作る
- *   POST /api/room?action=join    { code, color }  → 相手として参加する
+ *   POST /api/room?action=create  { seats }       → 部屋を作る（2 人 / 4 人）
+ *   POST /api/room?action=join    { code }        → 空いている席に着く
  *   GET  /api/room?code=..&since=..                → 盤面を取りに行く（ポーリング）
  *   POST /api/room?action=move    { .. }           → 一手打つ（サーバ側でルール検証）
  *   POST /api/room?action=say     { .. }           → ひとことを書き換える
@@ -23,7 +23,6 @@ import {
   variantOf,
   VARIANTS,
 } from '../js/rules.js';
-import { isColor, fillColors, firstAvailable } from '../js/palette.js';
 
 /** 見間違えやすい文字（O/0, I/1 など）を外した部屋コード用の英数字。 */
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -201,7 +200,6 @@ function publicView(room, seq) {
     hasOpponent: filledSeats(room) >= room.seats,
     game: room.game,
     chat: room.chat,
-    colors: room.colors,
   };
 }
 
@@ -291,8 +289,6 @@ async function handleCreate(res, body) {
     tokens,
     game: createGame(variant),
     chat,
-    // 参加者が決まるまでは仮の色を入れておき、入ってきたら本人の選んだ色にする
-    colors: fillColors({ 1: isColor(body.color) ? body.color : undefined }, seats),
   };
 
   await writeRoom(room, undefined);
@@ -312,11 +308,6 @@ async function handleJoin(res, body) {
     if (!seat) throw new RoomError(409, 'この部屋はもう席が埋まっています');
 
     r.tokens[seat] = token;
-
-    // 他の人と同じ色は取れないので、その場合は空いている色にずらす
-    const taken = seatNumbers(r).filter((p) => p !== seat).map((p) => r.colors[p]);
-    const wanted = isColor(body.color) ? body.color : null;
-    r.colors[seat] = wanted && !taken.includes(wanted) ? wanted : firstAvailable(taken);
 
     // 全部の席が埋まったらそのまま始める
     if (filledSeats(r) >= r.seats) r.status = 'playing';

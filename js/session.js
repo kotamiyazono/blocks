@@ -12,7 +12,7 @@ import {
   legalMoves,
   variantOf,
 } from './rules.js';
-import { DEFAULT_FIRST, isColor, partnerFor, colorName } from './palette.js';
+import { colorName } from './palette.js';
 
 export const state = {
   mode: null,          // 'solo' | 'local' | 'online'
@@ -22,7 +22,6 @@ export const state = {
   side: 1,             // ひとりプレーで自分が選んだ手番
   seats: 2,            // 人数（2 または 4）
   cpuSeats: [],        // CPU が受け持つ席
-  colors: null,        // 席ごとの色
   sel: null,           // { pieceId, oi, anchor }
   selTurn: null,       // 選択がどの手番のものか（手番が変わったら捨てる）
   lastAnchor: null,    // 矢印キーで動かすときの起点
@@ -30,15 +29,12 @@ export const state = {
   placeable: null,     // { key, set } 置けるピースの一覧をキャッシュ
   busy: false,         // 送信中はボタンを止める
   online: null,        // { code, token, player, seq, opponentJoined, watcher }
-  pendingJoin: null,   // 色を選んでもらっている最中の部屋コード
   quitArmed: false,    // 「やめる」の二度押し待ち
 };
 
 /* ------------------------------------------------------------------ 保存 */
 
 const ROOM_KEY = 'blocks:room';
-const COLOR_KEY = 'blocks:color';        // ひとり・オンラインで使う自分の色
-const LOCAL_COLOR_KEY = 'blocks:colors'; // 対面での先手・後手の色
 
 const read = (key, fallback) => {
   try {
@@ -51,23 +47,6 @@ const read = (key, fallback) => {
 const write = (key, value) => {
   try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* 保存できなくても続行できる */ }
 };
-
-/** 選んだ色の控え。次に遊ぶときはここから始まる。 */
-export const choice = {
-  mine: (() => {
-    const saved = read(COLOR_KEY, null);
-    return isColor(saved) ? saved : DEFAULT_FIRST;
-  })(),
-  local: (() => {
-    const saved = read(LOCAL_COLOR_KEY, null) || {};
-    const first = isColor(saved[1]) ? saved[1] : DEFAULT_FIRST;
-    const second = isColor(saved[2]) && saved[2] !== first ? saved[2] : partnerFor(first);
-    return { 1: first, 2: second };
-  })(),
-};
-
-export const rememberMyColor = (id) => { choice.mine = id; write(COLOR_KEY, id); };
-export const rememberLocalColors = () => write(LOCAL_COLOR_KEY, choice.local);
 
 /** 入っている部屋。再読み込みしても元の席に戻れるように控えておく。 */
 export const saveRoom = (room) =>
@@ -97,9 +76,9 @@ export function canAct() {
 export function labelFor(player) {
   if (player === state.myPlayer && state.mode !== 'local') return 'あなた';
   if (isCpuSeat(player)) {
-    return state.seats > 2 ? `CPU（${colorName(state.colors?.[player])}）` : 'CPU';
+    return state.seats > 2 ? `CPU（${colorName(player)}）` : 'CPU';
   }
-  if (state.seats > 2) return colorName(state.colors?.[player]) || `プレイヤー${player}`;
+  if (state.seats > 2) return colorName(player);
   if (state.mode === 'local') return player === 1 ? '先手' : '後手';
   return state.mode === 'solo' ? 'CPU' : '相手';
 }
