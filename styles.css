@@ -12,7 +12,6 @@
   --mist: #868C97;
   --line: #E4E6EB;
   --cell: #EDEEF2;
-  --cell-hover: #E3E5EB;
 
   --a: 124 58 237;        /* むらさき */
   --a-hi: 167 139 250;
@@ -22,7 +21,6 @@
   --b-dp: 154 52 18;
   --bad: 217 65 65;
 
-  --radius: 14px;
   --shadow-1: 0 1px 2px rgb(0 0 0 / .05);
   --shadow-2: 0 8px 28px rgb(0 0 0 / .12);
   --tap: 44px;
@@ -37,7 +35,6 @@
     --mist: #8B919C;
     --line: #2A2F37;
     --cell: #23272E;
-    --cell-hover: #2C313A;
     --shadow-1: 0 1px 2px rgb(0 0 0 / .4);
     --shadow-2: 0 8px 28px rgb(0 0 0 / .5);
   }

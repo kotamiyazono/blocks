@@ -9,7 +9,7 @@
  * そのため、読み込んだだけで DOM に触るようなことはしていない。
  */
 
-export const PALETTE = {
+const PALETTE = {
   grape:     { name: 'むらさき',   base: '124 58 237',  hi: '167 139 250', dp: '91 33 182' },
   tangerine: { name: 'オレンジ',   base: '234 88 12',   hi: '251 146 60',  dp: '154 52 18' },
   azure:     { name: 'ブルー',     base: '37 99 235',   hi: '96 165 250',  dp: '30 64 175' },
@@ -18,10 +18,10 @@ export const PALETTE = {
   lagoon:    { name: 'ターコイズ', base: '13 148 136',  hi: '45 212 191',  dp: '15 94 88' },
 };
 
-export const COLOR_IDS = Object.freeze(Object.keys(PALETTE));
+const COLOR_IDS = Object.freeze(Object.keys(PALETTE));
 
 export const DEFAULT_FIRST = 'grape';
-export const DEFAULT_SECOND = 'tangerine';
+const DEFAULT_SECOND = 'tangerine';
 
 export const isColor = (id) => Object.prototype.hasOwnProperty.call(PALETTE, id);
 

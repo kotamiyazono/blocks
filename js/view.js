@@ -75,7 +75,7 @@ export function cellFromPoint(el, x, y) {
 }
 
 /** 持ちピースのサムネイル（小さなマスを並べただけの図）。 */
-export function makeThumb(pieceId, orientationIndex, player) {
+function makeThumb(pieceId, orientationIndex, player) {
   const shape = ORIENTATIONS[pieceId][orientationIndex] || ORIENTATIONS[pieceId][0];
   const [h, w] = extent(shape);
   const filled = new Set(shape.map(([r, c]) => r * w + c));

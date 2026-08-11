@@ -15,13 +15,6 @@ import {
   isFirstMove,
 } from './rules.js';
 
-/** 難易度。ラベルは UI からそのまま使う。 */
-export const LEVELS = {
-  easy: { id: 'easy', label: 'やさしい' },
-  normal: { id: 'normal', label: 'ふつう' },
-  hard: { id: 'hard', label: 'つよい' },
-};
-
 const WEIGHTS = {
   easy: { size: 45, myMobility: 0, oppMobility: 0, advance: 0, noise: 340 },
   normal: { size: 100, myMobility: 14, oppMobility: 0, advance: 2, noise: 45 },
