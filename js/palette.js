@@ -2,7 +2,7 @@
  * BLOCKS — 駒の色
  *
  * 色は見た目だけの話なので、ゲームの進行には一切関わらせない。
- * スタイル側は全部 --a / --b という変数だけを見ているので、
+ * スタイル側は --p1 〜 --p4 という変数だけを見ているので、
  * ここで変数を差し替えれば盤も持ちピースも結果画面も一度に変わる。
  *
  * サーバ側も色の妥当性を確かめるためにこのファイルを読む。
@@ -20,41 +20,60 @@ const PALETTE = {
 
 const COLOR_IDS = Object.freeze(Object.keys(PALETTE));
 
-export const DEFAULT_FIRST = 'grape';
-const DEFAULT_SECOND = 'tangerine';
+/** 何も選ばなかったときの席ごとの色。 */
+const SEAT_DEFAULTS = Object.freeze(['grape', 'tangerine', 'azure', 'moss']);
+
+export const DEFAULT_FIRST = SEAT_DEFAULTS[0];
+const MAX_SEATS = 4;
 
 export const isColor = (id) => Object.prototype.hasOwnProperty.call(PALETTE, id);
+export const colorName = (id) => (isColor(id) ? PALETTE[id].name : '');
 
-const safe = (id, fallback) => (isColor(id) ? id : fallback);
+const defaultFor = (seat) => SEAT_DEFAULTS[(seat - 1) % SEAT_DEFAULTS.length];
 
-/** その色と組み合わせる相手側の既定色。 */
+/** 既に使われている色を避けて 1 つ選ぶ。 */
+export function firstAvailable(taken = []) {
+  const used = new Set(taken.filter(Boolean));
+  return COLOR_IDS.find((id) => !used.has(id)) || DEFAULT_FIRST;
+}
+
+/** その色と組み合わせる、2 人戦での相手側の既定色。 */
 export function partnerFor(id) {
-  return id === DEFAULT_SECOND ? DEFAULT_FIRST : DEFAULT_SECOND;
+  return firstAvailable([id]);
 }
 
-/** 使えない色を避けて 1 つ選ぶ。 */
-export function firstAvailable(taken) {
-  return COLOR_IDS.find((id) => id !== taken) || DEFAULT_FIRST;
+/** 人数分の色を、重ならないように埋める。 */
+export function fillColors(chosen, players) {
+  const colors = {};
+  const taken = [];
+  for (let seat = 1; seat <= players; seat++) {
+    const wanted = chosen?.[seat];
+    const id = isColor(wanted) && !taken.includes(wanted)
+      ? wanted
+      : (!taken.includes(defaultFor(seat)) ? defaultFor(seat) : firstAvailable(taken));
+    colors[seat] = id;
+    taken.push(id);
+  }
+  return colors;
 }
 
-/** 先手・後手の色を画面全体に反映する。 */
-export function applyColors(firstId, secondId) {
-  const a = PALETTE[safe(firstId, DEFAULT_FIRST)];
-  const b = PALETTE[safe(secondId, DEFAULT_SECOND)];
+/** 席ごとの色を画面全体に反映する。 */
+export function applyColors(colors) {
   const style = document.body.style;
-
-  style.setProperty('--a', a.base);
-  style.setProperty('--a-hi', a.hi);
-  style.setProperty('--a-dp', a.dp);
-  style.setProperty('--b', b.base);
-  style.setProperty('--b-hi', b.hi);
-  style.setProperty('--b-dp', b.dp);
+  for (let seat = 1; seat <= MAX_SEATS; seat++) {
+    const id = isColor(colors?.[seat]) ? colors[seat] : defaultFor(seat);
+    const c = PALETTE[id];
+    style.setProperty(`--p${seat}`, c.base);
+    style.setProperty(`--p${seat}-hi`, c.hi);
+    style.setProperty(`--p${seat}-dp`, c.dp);
+  }
 }
 
 /**
- * 色見本の並びを作る。taken に渡した色は相手が使っているので選べない。
+ * 色見本の並びを作る。taken に入っている色は他の人が使っているので選べない。
  */
-export function buildSwatches(container, { selected, taken, onPick }) {
+export function buildSwatches(container, { selected, taken = [], onPick }) {
+  const blocked = new Set(taken.filter(Boolean));
   const frag = document.createDocumentFragment();
 
   for (const id of COLOR_IDS) {
@@ -68,9 +87,9 @@ export function buildSwatches(container, { selected, taken, onPick }) {
     swatch.setAttribute('aria-label', PALETTE[id].name);
     swatch.setAttribute('aria-pressed', String(id === selected));
 
-    if (taken && id === taken) {
+    if (blocked.has(id) && id !== selected) {
       swatch.disabled = true;
-      swatch.title = '相手が使っています';
+      swatch.title = '他の人が使っています';
     } else {
       swatch.addEventListener('click', () => onPick(id));
     }

@@ -9,6 +9,7 @@
 import {
   createRoom,
   joinRoom,
+  startRoom,
   fetchRoom,
   sendMove,
   sendChat,
@@ -16,12 +17,9 @@ import {
   requestRematch,
   RoomWatcher,
 } from './online.js';
-import {
-  applyColors,
-  buildSwatches,
-  firstAvailable,
-  DEFAULT_FIRST,
-} from './palette.js';
+import { applyColors, buildSwatches, firstAvailable, fillColors } from './palette.js';
+import { chooseMove } from './ai.js';
+
 import {
   state,
   choice,
@@ -43,6 +41,8 @@ const el = {
   joiningDots: $('#joining-dots'),
   joinStart: $('#btn-join-start'),
   createRoom: $('#btn-create-room'),
+  seatCount: $('#seat-count'),
+  startNow: $('#btn-start-now'),
   chat: $('#chat'),
   chatInput: $('#chat-input'),
   chatThem: $('#chat-them'),
@@ -110,9 +110,13 @@ function onRoomUpdate(data) {
 
   // 盤面がまだ組み立てられていない画面（相手待ち・参加中）にいる場合
   if (!onGameScreen()) {
-    if (data.status === 'waiting') return; // まだ相手が来ていない
+    if (data.status === 'waiting') {
+      applyColors(fillColors(data.colors, data.seats));
+      paintWaiting(data);
+      return; // まだ人が揃っていない
+    }
     startOnlineGame(data);
-    toast('相手が参加しました');
+    toast(data.seats > 2 ? '対局がはじまります' : '相手が参加しました');
     return;
   }
 
@@ -131,6 +135,7 @@ function onRoomUpdate(data) {
     || previous.status !== data.game.status;
 
   state.game = data.game;
+  state.cpuSeats = data.cpu || [];
   if (advanced) {
     state.placeable = null;
     state.sel = null;
@@ -141,28 +146,74 @@ function onRoomUpdate(data) {
   render();
 
   if (!advanced) return;
-  if (data.game.status === 'finished') hooks.showResult();
-  else if (data.game.passedBy) hooks.notifyPass(data.game.passedBy);
+  if (data.game.status === 'finished') {
+    hooks.showResult();
+    return;
+  }
+  hooks.notifyPass(data.game.passedBy);
+  runCpuSeatIfHost();
 }
 
 const startOnlineGame = (data) => hooks.beginGame('online', {
   game: data.game,
   myPlayer: state.online.player,
   colors: data.colors,
+  cpuSeats: data.cpu || [],
 });
 
-const rememberSeat = (data, opponentJoined) => {
+/** 相手待ちの画面に、埋まった席と主催者向けの開始ボタンを出す。 */
+function paintWaiting(data) {
+  const seats = data.seats || 2;
+  const joined = data.joined || 1;
+  const iAmHost = state.online?.player === 1;
+
+  el.seatCount.hidden = seats <= 2;
+  el.seatCount.textContent = `${joined} / ${seats} 人`;
+
+  el.startNow.hidden = !iAmHost || joined >= seats;
+  el.startNow.disabled = false;
+}
+
+const rememberSeat = (data) => {
   state.online = {
     code: data.code,
     token: data.token,
     player: data.player,
     seq: data.seq,
-    opponentJoined,
+    opponentJoined: Boolean(data.hasOpponent),
     watcher: null,
   };
   state.myPlayer = data.player;
   saveRoom(state.online);
 };
+
+/* ==========================================================================
+   CPU が受け持つ席
+   サーバには常時動く仕組みが無いので、部屋を作った人の端末が代わりに考える。
+   ========================================================================== */
+
+let cpuTimer = null;
+
+export function runCpuSeatIfHost() {
+  clearTimeout(cpuTimer);
+  if (!state.online || state.online.player !== 1) return; // 主催者だけが回す
+
+  cpuTimer = setTimeout(async () => {
+    const g = state.game;
+    if (!g || g.status !== 'playing') return;
+    if (!state.cpuSeats.includes(g.turn)) return;
+    if (state.busy) return;
+
+    const move = chooseMove(g, g.turn, 'normal');
+    if (!move) return;
+
+    try {
+      onRoomUpdate(await sendMove(state.online.code, state.online.token, move.pieceId, move.cells));
+    } catch {
+      /* 失敗しても次のポーリングで状況を取り直す */
+    }
+  }, 700);
+}
 
 /* ==========================================================================
    一手を送る
@@ -204,18 +255,31 @@ let chatPending = null;
  * 相手の行を今の内容に合わせる。自分の入力欄には触らない。
  * 空でも行そのものは残す。消すと高さが変わって盤面が伸び縮みしてしまう。
  */
+let lastChat = {};
+
 function renderChat(chat) {
   if (!chat || !state.online) return;
-  const theirs = (chat[state.myPlayer === 1 ? 2 : 1] || '').trim();
 
-  if (theirs !== (el.chatThem.dataset.text || '')) {
-    el.chatThem.dataset.text = theirs;
-    // 相手が打ち込んでいる間は見に行く間隔を詰めて、文字が流れて見えるようにする
+  // 自分以外で、直前に変わった人の行を出す。誰も動いていなければ今出している人のまま。
+  const others = Object.keys(chat).map(Number).filter((p) => p !== state.myPlayer);
+  const changed = others.find((p) => (chat[p] || '') !== (lastChat[p] || ''));
+  lastChat = { ...chat };
+
+  let speaker = changed || Number(el.chatThem.dataset.speaker) || 0;
+  if (!speaker || !(chat[speaker] || '').trim()) {
+    speaker = others.find((p) => (chat[p] || '').trim()) || others[0];
+  }
+  const text = (chat[speaker] || '').trim();
+
+  if (changed) {
+    // 誰かが打ち込んでいる間は見に行く間隔を詰めて、文字が流れて見えるようにする
     if (state.online.watcher) state.online.watcher.hurry();
   }
 
-  el.chatThem.classList.toggle('is-empty', theirs.length === 0);
-  el.chatThemText.textContent = theirs || CHAT_PLACEHOLDER;
+  el.chatThem.dataset.speaker = String(speaker);
+  el.chatThemChip.className = `chip seat-${speaker}`;
+  el.chatThem.classList.toggle('is-empty', text.length === 0);
+  el.chatThemText.textContent = text || CHAT_PLACEHOLDER;
 }
 
 function wireChat() {
@@ -249,15 +313,16 @@ async function flushChat() {
 export function prepareChat(mode, myPlayer) {
   clearTimeout(chatTimer);
   chatPending = null;
+  lastChat = {};
   el.chatInput.value = '';
-  el.chatThem.dataset.text = '';
+  el.chatThem.dataset.speaker = '';
   el.chatThem.classList.add('is-empty');
   el.chatThemText.textContent = CHAT_PLACEHOLDER;
 
   el.chat.hidden = mode !== 'online';
   if (mode !== 'online') return;
-  el.chatMyChip.className = `chip chip-${myPlayer === 1 ? 'a' : 'b'}`;
-  el.chatThemChip.className = `chip chip-${myPlayer === 1 ? 'b' : 'a'}`;
+  el.chatMyChip.className = `chip seat-${myPlayer}`;
+  el.chatThemChip.className = 'chip';
 }
 
 /* ==========================================================================
@@ -270,11 +335,12 @@ function wireButtons() {
     el.onlineError.textContent = '';
 
     try {
-      const data = await createRoom(choice.mine);
-      rememberSeat(data, false);
-      applyColors(data.colors?.[1], data.colors?.[2]); // 待ち画面の色も自分の選んだ色に
+      const data = await createRoom(choice.mine, state.seats);
+      rememberSeat(data);
+      applyColors(fillColors(data.colors, data.seats)); // 待ち画面の色も選んだ色に
 
       el.inviteUrl.value = inviteUrlFor(data.code);
+      paintWaiting(data);
       showScreen('screen-waiting');
       startWatcher();
     } catch (error) {
@@ -303,6 +369,16 @@ function wireButtons() {
   });
 
   el.joinStart.addEventListener('click', joinPendingRoom);
+
+  el.startNow.addEventListener('click', async () => {
+    el.startNow.disabled = true;
+    try {
+      onRoomUpdate(await startRoom(state.online.code, state.online.token));
+    } catch (error) {
+      toast(error.message);
+      el.startNow.disabled = false;
+    }
+  });
 }
 
 async function copyInvite() {
@@ -335,31 +411,36 @@ export async function enterByCode(code) {
 
   if (await resumeSeat(code)) return;
 
-  // 相手が使っている色を確かめてから、自分の色を選んでもらう
-  let hostColor;
+  // 先に入っている人が使っている色を確かめてから、自分の色を選んでもらう
+  let taken = [];
+  let waitingFor = 0;
   try {
     const room = await fetchRoom(code);
     if (room.status !== 'waiting' || room.hasOpponent) {
-      throw new Error('この部屋はもう対戦がはじまっています');
+      throw new Error('この部屋はもう席が埋まっています');
     }
-    hostColor = room.colors?.[1] || DEFAULT_FIRST;
+    // 既に入っている席の色は取れない
+    taken = Array.from({ length: room.joined }, (_, i) => room.colors?.[i + 1]).filter(Boolean);
+    waitingFor = room.seats;
   } catch (error) {
     showJoinError(error.message);
     return;
   }
 
-  // 相手の色と同じものを選んでいたら、空いている色にずらしておく
-  if (choice.mine === hostColor) rememberMyColor(firstAvailable(hostColor));
+  // 使われている色を選んでいたら、空いている色にずらしておく
+  if (taken.includes(choice.mine)) rememberMyColor(firstAvailable(taken));
 
   const paint = () => buildSwatches($('#join-colors'), {
     selected: choice.mine,
-    taken: hostColor,
+    taken,
     onPick: (picked) => { rememberMyColor(picked); paint(); },
   });
   paint();
 
   el.joiningDots.hidden = true;
-  el.joiningNote.textContent = '相手が待っています。色を選んではじめてください。';
+  el.joiningNote.textContent = waitingFor > 2
+    ? `${waitingFor} 人対戦です。色を選んで席についてください。`
+    : '相手が待っています。色を選んではじめてください。';
   el.joiningColor.hidden = false;
   el.joinStart.hidden = false;
   el.joinStart.disabled = false;
@@ -377,8 +458,9 @@ async function resumeSeat(code) {
     state.myPlayer = saved.player;
 
     if (data.status === 'waiting') {
-      applyColors(data.colors?.[1], data.colors?.[2]);
+      applyColors(fillColors(data.colors, data.seats));
       el.inviteUrl.value = inviteUrlFor(code);
+      paintWaiting(data);
       showScreen('screen-waiting');
     } else {
       startOnlineGame(data);
@@ -399,9 +481,18 @@ async function joinPendingRoom() {
 
   try {
     const data = await joinRoom(code, choice.mine);
-    rememberSeat(data, true);
+    rememberSeat(data);
     state.pendingJoin = null;
-    startOnlineGame(data);
+
+    if (data.status === 'waiting') {
+      // 4 人戦でまだ揃っていない。他の人を待つ
+      applyColors(fillColors(data.colors, data.seats));
+      el.inviteUrl.value = inviteUrlFor(code);
+      paintWaiting(data);
+      showScreen('screen-waiting');
+    } else {
+      startOnlineGame(data);
+    }
     startWatcher();
   } catch (error) {
     el.joiningError.textContent = error.message;

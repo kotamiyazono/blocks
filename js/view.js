@@ -4,15 +4,19 @@
  * 盤面と持ちピースの DOM を作る／更新する部分。ゲームの進行や通信は扱わない。
  */
 
-import { N, START, ORIENTATIONS, extent } from './rules.js';
+import { ORIENTATIONS, extent, variantOf } from './rules.js';
 
 /** CSS の .board の padding と一致させる（座標計算に使う）。枠を持たないので 0。 */
 const BOARD_PADDING = 0;
 
-/** 盤面の 196 マスを一度だけ作る。以降はクラスの付け替えだけで更新する。 */
-export function buildBoard(el) {
+/** 盤のマスを一度だけ作る。以降はクラスの付け替えだけで更新する。 */
+export function buildBoard(el, variant) {
+  const size = variant.size;
+  el.style.setProperty('--board-size', String(size));
+  el.style.gridTemplateColumns = `repeat(${size}, 1fr)`;
+
   const frag = document.createDocumentFragment();
-  for (let i = 0; i < N * N; i++) {
+  for (let i = 0; i < size * size; i++) {
     const cell = document.createElement('div');
     cell.className = 'cell';
     cell.dataset.i = String(i);
@@ -21,31 +25,35 @@ export function buildBoard(el) {
   el.replaceChildren(frag);
 }
 
-const startIndex = (player) => START[player][0] * N + START[player][1];
-
 /**
  * 盤面を現在の状態に合わせて塗り直す。
  * ghost は仮置きのプレビューで、{ cells, valid, player } か null。
  */
 export function renderBoard(el, game, ghost) {
+  const v = variantOf(game);
+  const size = v.size;
   const cells = el.children;
-  const startA = startIndex(1);
-  const startB = startIndex(2);
+
+  // 開始点の印。マス番号 → 席番号
+  const starts = new Map();
+  for (const [player, [r, c]] of Object.entries(v.starts)) {
+    starts.set(r * size + c, Number(player));
+  }
 
   const lastSet = game.lastMove
-    ? new Set(game.lastMove.cells.map(([r, c]) => r * N + c))
+    ? new Set(game.lastMove.cells.map(([r, c]) => r * size + c))
     : null;
-  const ghostSet = ghost ? new Set(ghost.cells.map(([r, c]) => r * N + c)) : null;
-  const ghostClass = ghost ? (ghost.valid ? (ghost.player === 1 ? 'ghost-a' : 'ghost-b') : 'ghost-bad') : '';
+  const ghostSet = ghost ? new Set(ghost.cells.map(([r, c]) => r * size + c)) : null;
+  const ghostClass = ghost
+    ? (ghost.valid ? `ghost seat-${ghost.player}` : 'ghost-bad')
+    : '';
 
-  for (let i = 0; i < N * N; i++) {
+  for (let i = 0; i < size * size; i++) {
     const owner = game.board[i];
     let cls = 'cell';
 
-    if (owner === 1) cls += ' p1';
-    else if (owner === 2) cls += ' p2';
-    else if (i === startA) cls += ' start start-a';
-    else if (i === startB) cls += ' start start-b';
+    if (owner > 0) cls += ` p${owner}`;
+    else if (starts.has(i)) cls += ` start seat-${starts.get(i)}`;
 
     if (lastSet && lastSet.has(i)) cls += ' last';
     if (ghostSet && ghostSet.has(i)) cls += ' ' + ghostClass;
@@ -59,7 +67,7 @@ export function renderBoard(el, game, ghost) {
  * 画面座標を盤面のマスに変換する。
  * 盤の外でも少しの範囲なら端のマスに丸めるので、ドラッグが縁で途切れない。
  */
-export function cellFromPoint(el, x, y) {
+export function cellFromPoint(el, x, y, size) {
   const rect = el.getBoundingClientRect();
   const slack = 48;
   if (
@@ -68,9 +76,9 @@ export function cellFromPoint(el, x, y) {
   ) return null;
 
   const inner = rect.width - BOARD_PADDING * 2;
-  const clamp = (v) => Math.min(Math.max(v, 0), N - 1);
-  const c = clamp(Math.floor((x - rect.left - BOARD_PADDING) / inner * N));
-  const r = clamp(Math.floor((y - rect.top - BOARD_PADDING) / inner * N));
+  const clamp = (v) => Math.min(Math.max(v, 0), size - 1);
+  const c = clamp(Math.floor((x - rect.left - BOARD_PADDING) / inner * size));
+  const r = clamp(Math.floor((y - rect.top - BOARD_PADDING) / inner * size));
   return [r, c];
 }
 
@@ -84,10 +92,9 @@ function makeThumb(pieceId, orientationIndex, player) {
   grid.className = 'tile-grid';
   grid.style.gridTemplateColumns = `repeat(${w}, auto)`;
 
-  const fill = player === 1 ? 'fill-a' : 'fill-b';
   for (let i = 0; i < h * w; i++) {
     const dot = document.createElement('i');
-    if (filled.has(i)) dot.className = fill;
+    if (filled.has(i)) dot.className = `fill seat-${player}`;
     grid.appendChild(dot);
   }
   return grid;

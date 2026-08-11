@@ -11,6 +11,7 @@
  */
 
 import { cellFromPoint, centeredPiece, centerPiece, updateTrayFocus } from './view.js';
+import { variantOf } from './rules.js';
 import { state, canAct, currentGhost } from './session.js';
 import { $, $$, onGameScreen, toast } from './ui.js';
 import {
@@ -161,7 +162,7 @@ function setupBoard() {
   board.addEventListener('pointerdown', (event) => {
     if (!canAct() || !state.sel) return;
 
-    const rc = cellFromPoint(board, event.clientX, event.clientY);
+    const rc = cellFromPoint(board, event.clientX, event.clientY, variantOf(state.game).size);
     if (!rc) return;
     event.preventDefault();
     // 指が盤の外に出ても追い続ける。捕捉できない環境でも操作自体は成立する
@@ -199,7 +200,7 @@ function setupBoard() {
       clearTimeout(drag.timer);
     }
 
-    const rc = cellFromPoint(board, event.clientX, event.clientY);
+    const rc = cellFromPoint(board, event.clientX, event.clientY, variantOf(state.game).size);
     if (rc) moveGhostTo(rc);
   });
 

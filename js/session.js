@@ -10,15 +10,19 @@ import {
   cellsAtAnchor,
   isFirstMove,
   legalMoves,
+  variantOf,
 } from './rules.js';
-import { DEFAULT_FIRST, isColor, partnerFor } from './palette.js';
+import { DEFAULT_FIRST, isColor, partnerFor, colorName } from './palette.js';
 
 export const state = {
   mode: null,          // 'solo' | 'local' | 'online'
   game: null,
-  myPlayer: 1,         // ひとり／オンラインで自分が受け持つ側
+  myPlayer: 1,         // ひとり／オンラインで自分が受け持つ席
   level: 'normal',     // CPU の強さ
   side: 1,             // ひとりプレーで自分が選んだ手番
+  seats: 2,            // 人数（2 または 4）
+  cpuSeats: [],        // CPU が受け持つ席
+  colors: null,        // 席ごとの色
   sel: null,           // { pieceId, oi, anchor }
   selTurn: null,       // 選択がどの手番のものか（手番が変わったら捨てる）
   lastAnchor: null,    // 矢印キーで動かすときの起点
@@ -75,6 +79,9 @@ export const clearRoom = () => {
 
 /* ------------------------------------------------------ 状態から導けること */
 
+/** その席を CPU が受け持っているか。 */
+export const isCpuSeat = (player) => state.cpuSeats.includes(player);
+
 /** 手元の操作を受け付けてよいか。 */
 export function canAct() {
   const g = state.game;
@@ -83,10 +90,17 @@ export function canAct() {
   return g.turn === state.myPlayer;
 }
 
-/** 表示名。モードによって呼び方を変える。 */
+/**
+ * 表示名。人数と遊び方で呼び方が変わる。
+ * 4 人戦は「先手・後手」では足りないので、その席の色の名前で呼ぶ。
+ */
 export function labelFor(player) {
+  if (player === state.myPlayer && state.mode !== 'local') return 'あなた';
+  if (isCpuSeat(player)) {
+    return state.seats > 2 ? `CPU（${colorName(state.colors?.[player])}）` : 'CPU';
+  }
+  if (state.seats > 2) return colorName(state.colors?.[player]) || `プレイヤー${player}`;
   if (state.mode === 'local') return player === 1 ? '先手' : '後手';
-  if (player === state.myPlayer) return 'あなた';
   return state.mode === 'solo' ? 'CPU' : '相手';
 }
 
@@ -107,7 +121,7 @@ export function placeableSet() {
   if (state.placeable && state.placeable.key === key) return state.placeable.set;
 
   const p = g.turn;
-  const moves = legalMoves(g.board, p, g.hands[p], isFirstMove(g, p));
+  const moves = legalMoves(variantOf(g), g.board, p, g.hands[p], isFirstMove(g, p));
   const set = new Set(moves.map((m) => m.pieceId));
   state.placeable = { key, set };
   return set;
@@ -129,7 +143,8 @@ export function computeSelection(pieceId) {
 export function currentGhost() {
   if (!state.sel || !state.sel.anchor || !canAct()) return null;
   const g = state.game;
+  const v = variantOf(g);
   const p = g.turn;
-  const cells = cellsAtAnchor(state.sel.pieceId, state.sel.oi, state.sel.anchor);
-  return { cells, valid: canPlace(g.board, p, cells, isFirstMove(g, p)), player: p };
+  const cells = cellsAtAnchor(v, state.sel.pieceId, state.sel.oi, state.sel.anchor);
+  return { cells, valid: canPlace(v, g.board, p, cells, isFirstMove(g, p)), player: p };
 }

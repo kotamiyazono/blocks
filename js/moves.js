@@ -5,7 +5,7 @@
  * 盤に確定させる（＝手を進める）操作はここには無い。
  */
 
-import { N, ORIENTATIONS, flippedOrientation } from './rules.js';
+import { ORIENTATIONS, flippedOrientation, variantOf } from './rules.js';
 import { state, canAct, computeSelection } from './session.js';
 import { toast } from './ui.js';
 import { render, updateBoard } from './render.js';
@@ -55,8 +55,9 @@ export function flipSelection() {
 export function moveAnchor(dr, dc) {
   if (!state.sel || !canAct()) return;
 
-  const anchor = state.sel.anchor || [Math.floor(N / 2), Math.floor(N / 2)];
-  const clamp = (v) => Math.min(Math.max(v, 0), N - 1);
+  const size = variantOf(state.game).size;
+  const anchor = state.sel.anchor || [Math.floor(size / 2), Math.floor(size / 2)];
+  const clamp = (v) => Math.min(Math.max(v, 0), size - 1);
   const next = [clamp(anchor[0] + dr), clamp(anchor[1] + dc)];
 
   state.sel.anchor = next;

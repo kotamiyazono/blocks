@@ -140,11 +140,13 @@ function renderStatus() {
     return;
   }
   if (!canAct()) {
-    statusLine.textContent = state.mode === 'solo' ? 'CPU が考えています…' : '相手が考えています…';
+    statusLine.textContent = `${labelFor(g.turn)}が考えています…`;
     return;
   }
 
-  const who = state.mode === 'local' ? `<b>${labelFor(g.turn)}の番</b>` : '<b>あなたの番</b>';
+  const who = state.mode === 'local'
+    ? `<b>${labelFor(g.turn)}の番</b>`
+    : '<b>あなたの番</b>';
 
   // 回転と反転にボタンを置いていないので、やり方は常に添えておく
   let hint;

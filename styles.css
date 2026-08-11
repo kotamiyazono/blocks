@@ -13,12 +13,11 @@
   --line: #E4E6EB;
   --cell: #EDEEF2;
 
-  --a: 124 58 237;        /* むらさき */
-  --a-hi: 167 139 250;
-  --a-dp: 91 33 182;
-  --b: 234 88 12;         /* オレンジ */
-  --b-hi: 251 146 60;
-  --b-dp: 154 52 18;
+  /* 席ごとの色。実際の値は palette.js が対局開始時に入れる（ここは初期値） */
+  --p1: 124 58 237;  --p1-hi: 167 139 250;  --p1-dp: 91 33 182;
+  --p2: 234 88 12;   --p2-hi: 251 146 60;   --p2-dp: 154 52 18;
+  --p3: 37 99 235;   --p3-hi: 96 165 250;   --p3-dp: 30 64 175;
+  --p4: 22 163 74;   --p4-hi: 74 222 128;   --p4-dp: 21 105 47;
   --bad: 217 65 65;
 
   --shadow-1: 0 1px 2px rgb(0 0 0 / .05);
@@ -59,20 +58,24 @@ body {
 button { font: inherit; color: inherit; background: none; border: none; cursor: pointer; }
 
 /* --------------------------------------------------------------------------
-   駒の質感。色はこの 2 クラスだけが持つ。
+   駒の色。
+   席番号のクラスが「その席の色」を --c に写し、実際に塗るのは共通の 1 か所だけ。
+   こうしておくと人数が増えても塗り方の記述は増えない。
    -------------------------------------------------------------------------- */
-.fill-a {
-  background: linear-gradient(158deg, rgb(var(--a-hi) / .95), rgb(var(--a) / .95) 58%, rgb(var(--a-dp) / .97));
-  box-shadow: inset 0 1px 1px rgb(255 255 255 / .5);
-}
-.fill-b {
-  background: linear-gradient(158deg, rgb(var(--b-hi) / .95), rgb(var(--b) / .95) 58%, rgb(var(--b-dp) / .97));
+.seat-1, .cell.p1 { --c: var(--p1); --c-hi: var(--p1-hi); --c-dp: var(--p1-dp); }
+.seat-2, .cell.p2 { --c: var(--p2); --c-hi: var(--p2-hi); --c-dp: var(--p2-dp); }
+.seat-3, .cell.p3 { --c: var(--p3); --c-hi: var(--p3-hi); --c-dp: var(--p3-dp); }
+.seat-4, .cell.p4 { --c: var(--p4); --c-hi: var(--p4-hi); --c-dp: var(--p4-dp); }
+
+.fill {
+  background: linear-gradient(158deg, rgb(var(--c-hi) / .95), rgb(var(--c) / .95) 58%, rgb(var(--c-dp) / .97));
   box-shadow: inset 0 1px 1px rgb(255 255 255 / .5);
 }
 
-.chip { display: block; width: 12px; height: 12px; border-radius: 3px; flex: none; }
-.chip-a { background: linear-gradient(158deg, rgb(var(--a-hi)), rgb(var(--a-dp))); }
-.chip-b { background: linear-gradient(158deg, rgb(var(--b-hi)), rgb(var(--b-dp))); }
+.chip {
+  display: block; width: 12px; height: 12px; border-radius: 3px; flex: none;
+  background: linear-gradient(158deg, rgb(var(--c-hi)), rgb(var(--c-dp)));
+}
 
 /* --------------------------------------------------------------------------
    画面切り替え
@@ -171,7 +174,7 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
 
 .logo { display: flex; gap: 3px; margin-bottom: 20px; }
 .logo .chip { width: 18px; height: 18px; border-radius: 4px; }
-.logo .chip-b { transform: translate(-3px, 15px); }
+.logo .chip:last-child { transform: translate(-3px, 15px); }
 
 .wordmark {
   font-size: 15px;
@@ -204,6 +207,9 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
   padding-left: 2px;
 }
 .setup-actions { display: flex; flex-direction: column; align-items: center; gap: 6px; margin-top: 16px; }
+
+.seat-count { font-size: 13px; font-weight: 600; color: var(--ink); }
+.seat-count[hidden] { display: none; }
 
 .waiting-dots { display: flex; gap: 7px; margin: 8px 0 20px; }
 /* クラス側で display を指定しているので、hidden も明示しないと効かない */
@@ -271,6 +277,9 @@ body.mode-local .board-area { padding-top: 0; }
   touch-action: none;
   user-select: none;
 }
+/* 20×20 はマスが細かいので、隙間と角丸を控えめにして 1 マスを大きく見せる */
+.board[style*="repeat(20"] { gap: 1.5px; }
+.board[style*="repeat(20"] .cell { border-radius: 2px; }
 
 .cell { background: var(--cell); border-radius: 2.5px; position: relative; }
 
@@ -280,17 +289,12 @@ body.mode-local .board-area { padding-top: 0; }
   position: absolute;
   inset: 32%;
   border-radius: 50%;
+  background: rgb(var(--c) / .38);
 }
-.cell.start-a::after { background: rgb(var(--a) / .38); }
-.cell.start-b::after { background: rgb(var(--b) / .38); }
 
 /* 置かれた駒 */
-.cell.p1 {
-  background: linear-gradient(158deg, rgb(var(--a-hi)), rgb(var(--a)) 58%, rgb(var(--a-dp)));
-  box-shadow: inset 0 1px 1px rgb(255 255 255 / .45);
-}
-.cell.p2 {
-  background: linear-gradient(158deg, rgb(var(--b-hi)), rgb(var(--b)) 58%, rgb(var(--b-dp)));
+.cell.p1, .cell.p2, .cell.p3, .cell.p4 {
+  background: linear-gradient(158deg, rgb(var(--c-hi)), rgb(var(--c)) 58%, rgb(var(--c-dp)));
   box-shadow: inset 0 1px 1px rgb(255 255 255 / .45);
 }
 
@@ -306,8 +310,7 @@ body.mode-local .board-area { padding-top: 0; }
 }
 
 /* 仮置きのプレビュー */
-.cell.ghost-a { background: rgb(var(--a) / .42); outline: 1.5px dashed rgb(var(--a)); outline-offset: -1.5px; }
-.cell.ghost-b { background: rgb(var(--b) / .42); outline: 1.5px dashed rgb(var(--b)); outline-offset: -1.5px; }
+.cell.ghost { background: rgb(var(--c) / .42); outline: 1.5px dashed rgb(var(--c)); outline-offset: -1.5px; }
 .cell.ghost-bad {
   background: repeating-linear-gradient(45deg,
     rgb(var(--bad) / .34) 0 3px, rgb(var(--bad) / .12) 3px 6px);
@@ -450,6 +453,7 @@ body.mode-local .board-area { padding-top: 0; }
 
 .tile-grid { display: grid; gap: 1px; }
 .tile-grid i { width: 9px; height: 9px; border-radius: 2px; display: block; }
+.tile-grid i.fill { box-shadow: inset 0 .5px 1px rgb(255 255 255 / .5); }
 
 /* 対面対戦は上下 2 つのパネルが入るぶん高さで頭打ちになる。
    付属物をひとまわり小さくして、その差をまるごと盤面に回す。 */
@@ -587,7 +591,7 @@ body.mode-local .score { padding: 3px 9px; }
   text-indent: .3em;
   color: var(--mist);
 }
-.result-badge.is-win { color: rgb(var(--a)); }
+.result-badge.is-win { color: rgb(var(--p1)); }
 .result-rows { width: 100%; margin: 4px 0; }
 .result-row {
   display: flex;

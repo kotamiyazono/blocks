@@ -16,15 +16,19 @@
  *   room.js     オンライン対戦の段取り
  */
 
-import { applyMove, canPlace, cellsAtAnchor, createGame, isFirstMove, result } from './rules.js';
+import {
+  VARIANTS, applyMove, canPlace, cellsAtAnchor, createGame,
+  isFirstMove, result, variantOf,
+} from './rules.js';
 import { chooseMove } from './ai.js';
-import { applyColors, buildSwatches, partnerFor } from './palette.js';
+import { applyColors, buildSwatches, fillColors } from './palette.js';
 import { buildBoard } from './view.js';
 import {
   state,
   choice,
   canAct,
   labelFor,
+  isCpuSeat,
   rememberMyColor,
   rememberLocalColors,
 } from './session.js';
@@ -39,6 +43,7 @@ import {
   rematchOnline,
   closeRoom,
   stopWatcher,
+  runCpuSeatIfHost,
 } from './room.js';
 
 const sheetRules = $('#sheet-rules');
@@ -54,10 +59,14 @@ function beginGame(mode, options = {}) {
   clearTimeout(cpuTimer);
 
   state.mode = mode;
-  // 色は見た目だけの話なので、盤を組む前に当てておけば以降どこにも影響しない
-  applyColors(options.colors?.[1], options.colors?.[2]);
+  state.game = options.game || createGame(options.variant);
+  state.seats = variantOf(state.game).players;
+  state.cpuSeats = options.cpuSeats || [];
+  state.colors = fillColors(options.colors, state.seats);
 
-  state.game = options.game || createGame();
+  // 色は見た目だけの話なので、盤を組む前に当てておけば以降どこにも影響しない
+  applyColors(state.colors);
+
   state.myPlayer = options.myPlayer || 1;
   state.sel = null;
   state.selTurn = null;
@@ -71,12 +80,22 @@ function beginGame(mode, options = {}) {
   document.body.classList.add(`mode-${mode}`);
 
   prepareChat(mode, state.myPlayer);
-  buildBoard(board);
+  buildBoard(board, variantOf(state.game));
   hideResult();
   showScreen('screen-game');
   render();
 
-  if (mode === 'solo' && state.game.turn !== state.myPlayer) scheduleCpu();
+  maybeRunCpu();
+}
+
+/** CPU が受け持つ席の番になっていたら、少し間を置いて打たせる。 */
+function maybeRunCpu() {
+  const g = state.game;
+  if (!g || g.status !== 'playing') return;
+  if (!isCpuSeat(g.turn)) return;
+
+  if (state.mode === 'solo') scheduleCpu();
+  else if (state.mode === 'online') runCpuSeatIfHost();
 }
 
 /* ========================================================================
@@ -87,9 +106,10 @@ async function placeSelection() {
   if (!canAct() || !state.sel || !state.sel.anchor) return;
 
   const g = state.game;
+  const v = variantOf(g);
   const p = g.turn;
-  const cells = cellsAtAnchor(state.sel.pieceId, state.sel.oi, state.sel.anchor);
-  if (!canPlace(g.board, p, cells, isFirstMove(g, p))) return;
+  const cells = cellsAtAnchor(v, state.sel.pieceId, state.sel.oi, state.sel.anchor);
+  if (!canPlace(v, g.board, p, cells, isFirstMove(g, p))) return;
 
   state.lastAnchor = state.sel.anchor;
 
@@ -112,16 +132,20 @@ function commit(next) {
     showResult();
     return;
   }
-  if (next.passedBy) notifyPass(next.passedBy);
-  if (state.mode === 'solo' && next.turn !== state.myPlayer) scheduleCpu();
+  notifyPass(next.passedBy);
+  maybeRunCpu();
 }
 
 /** 置ける場所が無くて手番を飛ばされた人がいることを知らせる。 */
 function notifyPass(skipped) {
-  const mine = state.mode !== 'local' && skipped === state.myPlayer;
-  toast(mine
-    ? 'あなたは置ける場所が無いので飛ばされました'
-    : `${labelFor(skipped)}は置ける場所が無いので飛ばされました`);
+  if (!skipped || skipped.length === 0) return;
+
+  if (skipped.includes(state.myPlayer) && state.mode !== 'local') {
+    toast('あなたは置ける場所が無いので飛ばされました');
+    return;
+  }
+  const names = skipped.map(labelFor).join('・');
+  toast(`${names}は置ける場所が無いので飛ばされました`);
 }
 
 let cpuTimer = null;
@@ -162,25 +186,42 @@ function showResult() {
   // オンラインでは相手が「もう一局」を選んだのを受け取りたいので、見に行くのは止めない
   const scores = result(state.game);
 
-  for (const row of $$('#sheet-result .result-row')) {
-    const player = Number(row.dataset.player);
-    $('.result-name', row).textContent = labelFor(player);
-    $('.result-num', row).textContent = String(scores[player]);
-    row.classList.toggle('is-winner', scores.winner === player);
+  // 残りマスの少ない順に並べる。人数が変わるので毎回組み立て直す
+  const rows = document.createDocumentFragment();
+  for (const player of scores.ranking) {
+    const row = document.createElement('div');
+    row.className = 'result-row' + (scores.leaders.includes(player) ? ' is-winner' : '');
+
+    const chip = document.createElement('i');
+    chip.className = `chip seat-${player}`;
+    const name = document.createElement('span');
+    name.className = 'result-name';
+    name.textContent = labelFor(player);
+    const num = document.createElement('b');
+    num.textContent = String(scores.remaining[player]);
+
+    row.append(chip, name, num);
+    rows.appendChild(row);
   }
+  $('#result-rows').replaceChildren(rows);
 
   const badge = $('#result-badge');
   const title = $('#result-title');
+  const draw = scores.winner === 0;
 
   if (state.mode === 'local') {
-    badge.textContent = scores.winner === 0 ? 'DRAW' : 'WIN';
-    badge.classList.toggle('is-win', scores.winner !== 0);
-    title.textContent = scores.winner === 0 ? '引き分け' : `${labelFor(scores.winner)}の勝ち`;
+    badge.textContent = draw ? 'DRAW' : 'WIN';
+    badge.classList.toggle('is-win', !draw);
+    title.textContent = draw ? '引き分け' : `${labelFor(scores.winner)}の勝ち`;
   } else {
     const won = scores.winner === state.myPlayer;
-    badge.textContent = scores.winner === 0 ? 'DRAW' : won ? 'YOU WIN' : 'YOU LOSE';
+    badge.textContent = draw ? 'DRAW' : won ? 'YOU WIN' : 'YOU LOSE';
     badge.classList.toggle('is-win', won);
-    title.textContent = scores.winner === 0 ? '引き分け' : won ? 'あなたの勝ち' : 'あなたの負け';
+    if (draw) title.textContent = '引き分け';
+    else if (won) title.textContent = 'あなたの勝ち';
+    else title.textContent = state.seats > 2
+      ? `${scores.ranking.indexOf(state.myPlayer) + 1}位（${labelFor(scores.winner)}の勝ち）`
+      : 'あなたの負け';
   }
 
   rematchButton.textContent = state.mode === 'online' ? 'もう一局さそう' : 'もう一度';
@@ -191,7 +232,7 @@ rematchButton.addEventListener('click', async () => {
   hideResult();
 
   if (state.mode === 'solo') {
-    beginGame('solo', { myPlayer: state.myPlayer, colors: soloColors() });
+    beginGame('solo', soloSetup());
     return;
   }
   if (state.mode === 'local') {
@@ -227,12 +268,19 @@ async function goHome() {
    はじめる前の設定
    ======================================================================== */
 
-/** ひとりプレーの色。自分が選んだ色を自分の側に、CPU にはそれと違う色を当てる。 */
-function soloColors() {
-  const cpuColor = partnerFor(choice.mine);
-  return state.side === 1
-    ? { 1: choice.mine, 2: cpuColor }
-    : { 1: cpuColor, 2: choice.mine };
+/** ひとりプレーの設定。4 人戦のときは自分が先手で、残り 3 席を CPU が持つ。 */
+function soloSetup() {
+  const seats = state.seats === 4 ? 4 : 2;
+  const mySeat = seats === 4 ? 1 : state.side;
+  const cpuSeats = [];
+  for (let p = 1; p <= seats; p++) if (p !== mySeat) cpuSeats.push(p);
+
+  return {
+    variant: seats === 4 ? VARIANTS.four.id : VARIANTS.duo.id,
+    myPlayer: mySeat,
+    cpuSeats,
+    colors: { [mySeat]: choice.mine },
+  };
 }
 
 /** 段組みの選択（CPU の強さ・手番）。押されたものだけを点ける。 */
@@ -251,6 +299,28 @@ function wireSegmented(id, key, parse = String) {
 
 wireSegmented('#level-picker', 'level');
 wireSegmented('#side-picker', 'side', Number);
+wireSegmented('#solo-seats', 'seats', Number);
+wireSegmented('#online-seats', 'seats', Number);
+
+/** 手番を選べるのは 2 人戦のときだけ（4 人戦は自分が先手で固定）。 */
+function syncSeatFields() {
+  $('#side-field').hidden = state.seats !== 2;
+}
+for (const id of ['#solo-seats', '#online-seats']) {
+  $(id).addEventListener('click', syncSeatFields);
+}
+
+/** 人数の選択を今の状態に合わせて塗り直す（画面を開き直したとき用）。 */
+function paintSeatPickers() {
+  for (const id of ['#solo-seats', '#online-seats']) {
+    for (const button of $$(`${id} button`)) {
+      const on = Number(button.dataset.value) === state.seats;
+      button.classList.toggle('is-on', on);
+      button.setAttribute('aria-checked', String(on));
+    }
+  }
+  syncSeatFields();
+}
 
 /** 自分の色を選ぶ見本（ひとり・オンライン共通）。 */
 function renderMyColorPickers() {
@@ -282,7 +352,7 @@ function renderLocalColorPickers() {
 }
 
 $('#btn-solo-start').addEventListener('click', () => {
-  beginGame('solo', { myPlayer: state.side, colors: soloColors() });
+  beginGame('solo', soloSetup());
 });
 
 $('#btn-local-start').addEventListener('click', () => {
@@ -300,6 +370,7 @@ for (const button of $$('[data-mode]')) {
       renderLocalColorPickers();
       showScreen('screen-local');
     } else {
+      paintSeatPickers();
       renderMyColorPickers();
       showScreen(mode === 'solo' ? 'screen-solo' : 'screen-online');
     }
@@ -342,7 +413,7 @@ initInput({ place: placeSelection, undo });
 initRoom({ beginGame, goHome, showResult, notifyPass, hideResult });
 
 // ホームの印も前回選んだ色で出す
-applyColors(choice.mine, partnerFor(choice.mine));
+applyColors(fillColors({ 1: choice.mine }, 4));
 
 const invited = location.hash.replace('#', '').trim().toUpperCase();
 if (/^[A-Z0-9]{4}$/.test(invited)) enterByCode(invited);

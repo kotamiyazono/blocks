@@ -2,17 +2,16 @@
  * BLOCKS — CPU の思考
  *
  * 1 手先を読む評価関数型。ブロックスは「大きいピースを早く捌く」「自分の角(展開点)を増やす」
- * 「相手の角を潰す」の 3 つがほぼ全てなので、その 3 つを重み付けして足している。
+ * 「他の色の角を潰す」の 3 つがほぼ全てなので、その 3 つを重み付けして足している。
  * 探索は 1 手分だけなので、盤面が大きくても一瞬で返る。
  */
 
 import {
-  N,
-  START,
   PIECE_SIZE,
   legalMoves,
   anchorCells,
   isFirstMove,
+  variantOf,
 } from './rules.js';
 
 const WEIGHTS = {
@@ -22,24 +21,24 @@ const WEIGHTS = {
 };
 
 /** 盤面を書き換えずに、その手を打った後の盤面を作る。 */
-function boardAfter(board, player, cells) {
+function boardAfter(board, size, player, cells) {
   const next = board.slice();
-  for (const [r, c] of cells) next[r * N + c] = player;
+  for (const [r, c] of cells) next[r * size + c] = player;
   return next;
 }
 
 /**
- * 相手の開始点にどれだけ近づいたか。
- * 序盤に中央へ張り出すほど後半の展開が効くので、わずかな加点として効かせる。
+ * 盤の真ん中にどれだけ近づいたか。
+ * 隅や端に固まると後半の展開が効かなくなるので、わずかな加点として効かせる。
  */
-function advanceScore(cells, player) {
-  const [tr, tc] = START[player === 1 ? 2 : 1];
+function advanceScore(cells, size) {
+  const middle = (size - 1) / 2;
   let best = Infinity;
   for (const [r, c] of cells) {
-    const d = Math.abs(r - tr) + Math.abs(c - tc);
+    const d = Math.abs(r - middle) + Math.abs(c - middle);
     if (d < best) best = d;
   }
-  return -best; // 近いほど高い
+  return -best; // 中央に近いほど高い
 }
 
 /**
@@ -47,28 +46,32 @@ function advanceScore(cells, player) {
  */
 export function chooseMove(game, player, level = 'normal') {
   const w = WEIGHTS[level] || WEIGHTS.normal;
+  const v = variantOf(game);
   const first = isFirstMove(game, player);
-  const moves = legalMoves(game.board, player, game.hands[player], first);
+  const moves = legalMoves(v, game.board, player, game.hands[player], first);
   if (moves.length === 0) return null;
 
-  const opponent = player === 1 ? 2 : 1;
-  const opponentFirst = isFirstMove(game, opponent);
-
-  // 相手の展開点を数えるのは少し重いので、必要な難易度のときだけ計算する
-  const wantsOpponent = w.oppMobility !== 0;
+  // 他の色の展開を邪魔する評価は少し重いので、必要な難易度のときだけ計算する
+  const rivals = w.oppMobility !== 0
+    ? Object.keys(game.hands).map(Number).filter((p) => p !== player)
+    : [];
 
   let best = null;
   let bestScore = -Infinity;
 
   for (const move of moves) {
-    const after = boardAfter(game.board, player, move.cells);
+    const after = boardAfter(game.board, v.size, player, move.cells);
 
     let score = PIECE_SIZE[move.pieceId] * w.size;
-    score += anchorCells(after, player, false).length * w.myMobility;
-    if (wantsOpponent) {
-      score -= anchorCells(after, opponent, opponentFirst).length * w.oppMobility;
+    score += anchorCells(v, after, player, false).length * w.myMobility;
+
+    // 他の色の展開点は、人数で割って 1 人あたりの重みが変わらないようにする
+    for (const rival of rivals) {
+      const rivalFirst = isFirstMove(game, rival);
+      score -= anchorCells(v, after, rival, rivalFirst).length * (w.oppMobility / rivals.length);
     }
-    score += advanceScore(move.cells, player) * w.advance;
+
+    score += advanceScore(move.cells, v.size) * w.advance;
     score += Math.random() * w.noise;
 
     if (score > bestScore) {

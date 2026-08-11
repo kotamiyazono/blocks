@@ -21,7 +21,7 @@
 <section class="screen is-active" id="screen-home">
   <div class="home-inner">
     <div class="logo" aria-hidden="true">
-      <i class="chip chip-a"></i><i class="chip chip-b"></i>
+      <i class="chip seat-1"></i><i class="chip seat-2"></i>
     </div>
     <h1 class="wordmark">BLOCKS</h1>
     <p class="tagline">角でつなげて、広げていく陣取りゲーム</p>
@@ -42,6 +42,14 @@
     <h2 class="setup-title">ひとりで遊ぶ</h2>
 
     <div class="field">
+      <span class="field-label">人数</span>
+      <div class="segmented" id="solo-seats" role="radiogroup" aria-label="人数">
+        <button role="radio" data-value="2" aria-checked="true" class="is-on">2人（14×14）</button>
+        <button role="radio" data-value="4">4人（20×20）</button>
+      </div>
+    </div>
+
+    <div class="field">
       <span class="field-label">CPU の強さ</span>
       <div class="segmented" id="level-picker" role="radiogroup" aria-label="CPU の強さ">
         <button role="radio" data-value="easy">やさしい</button>
@@ -50,7 +58,7 @@
       </div>
     </div>
 
-    <div class="field">
+    <div class="field" id="side-field">
       <span class="field-label">手番</span>
       <div class="segmented" id="side-picker" role="radiogroup" aria-label="手番">
         <button role="radio" data-value="1" aria-checked="true" class="is-on">先手</button>
@@ -100,6 +108,14 @@
     <p class="setup-note">部屋を作ると招待URLができます。相手に送って、開いてもらうだけで対戦がはじまります。</p>
 
     <div class="field">
+      <span class="field-label">人数</span>
+      <div class="segmented" id="online-seats" role="radiogroup" aria-label="人数">
+        <button role="radio" data-value="2" aria-checked="true" class="is-on">2人（14×14）</button>
+        <button role="radio" data-value="4">4人（20×20）</button>
+      </div>
+    </div>
+
+    <div class="field">
       <span class="field-label">あなたの色</span>
       <div class="swatches" id="online-colors" role="group" aria-label="あなたの色"></div>
     </div>
@@ -118,12 +134,15 @@
   <div class="setup-inner">
     <h2 class="setup-title">相手を待っています</h2>
 
+    <p class="seat-count" id="seat-count" hidden></p>
     <div class="waiting-dots" aria-hidden="true"><i></i><i></i><i></i></div>
 
     <button class="btn btn-primary" id="btn-share">招待URLを送る</button>
     <button class="btn" id="btn-copy">URLをコピー</button>
 
     <input class="url-field" id="invite-url" readonly hidden aria-label="招待URL">
+
+    <button class="btn" id="btn-start-now" hidden>空いた席をCPUにして始める</button>
 
     <p class="setup-note" id="waiting-note">相手がURLを開くと自動ではじまります。この画面のままお待ちください。</p>
 
@@ -228,18 +247,7 @@
     <p class="result-badge" id="result-badge">RESULT</p>
     <h2 class="sheet-title" id="result-title">結果</h2>
 
-    <div class="result-rows">
-      <div class="result-row" data-player="1">
-        <i class="chip chip-a"></i>
-        <span class="result-name">先手</span>
-        <b class="result-num">0</b>
-      </div>
-      <div class="result-row" data-player="2">
-        <i class="chip chip-b"></i>
-        <span class="result-name">後手</span>
-        <b class="result-num">0</b>
-      </div>
-    </div>
+    <div class="result-rows" id="result-rows"></div>
     <p class="result-hint">残りマスが少ないほうの勝ち</p>
 
     <button class="btn btn-primary" id="btn-rematch">もう一度</button>

@@ -20,8 +20,10 @@ import {
   canPlace,
   isFirstMove,
   matchesPiece,
+  variantOf,
+  VARIANTS,
 } from '../js/rules.js';
-import { isColor, partnerFor, firstAvailable, DEFAULT_FIRST } from '../js/palette.js';
+import { isColor, fillColors, firstAvailable } from '../js/palette.js';
 
 /** 見間違えやすい文字（O/0, I/1 など）を外した部屋コード用の英数字。 */
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -176,7 +178,14 @@ async function updateRoom(code, mutate) {
    受け答え
    ======================================================================== */
 
-/** クライアントに返す形。相手のトークンは絶対に含めない。 */
+/** 席が埋まっている数（CPU も含む）。 */
+const filledSeats = (room) =>
+  seatNumbers(room).filter((p) => room.tokens[p] || room.cpu.includes(p)).length;
+
+const seatNumbers = (room) =>
+  Array.from({ length: room.seats }, (_, i) => i + 1);
+
+/** クライアントに返す形。他の人のトークンは絶対に含めない。 */
 function publicView(room, seq) {
   if (seq !== undefined && seq === room.seq) {
     return { seq: room.seq, unchanged: true };
@@ -185,10 +194,14 @@ function publicView(room, seq) {
     seq: room.seq,
     code: room.code,
     status: room.status,
-    hasOpponent: Boolean(room.tokens[1] && room.tokens[2]),
+    seats: room.seats,
+    variant: room.variant,
+    cpu: room.cpu,
+    joined: seatNumbers(room).filter((p) => room.tokens[p]).length,
+    hasOpponent: filledSeats(room) >= room.seats,
     game: room.game,
-    chat: room.chat || { 1: '', 2: '' },
-    colors: room.colors || { 1: DEFAULT_FIRST, 2: partnerFor(DEFAULT_FIRST) },
+    chat: room.chat,
+    colors: room.colors,
   };
 }
 
@@ -198,11 +211,21 @@ const send = (res, status, body) => {
   res.status(status).send(JSON.stringify(body));
 };
 
-/** その部屋の参加者としてどちらの側か。名乗れなければ 403。 */
+/** その部屋の何番目の席の人か。名乗れなければ 403。 */
 function seatOf(room, token) {
-  const player = room.tokens[1] === token ? 1 : room.tokens[2] === token ? 2 : 0;
-  if (!player) throw new RoomError(403, 'この対局の参加者として確認できませんでした');
-  return player;
+  const seat = seatNumbers(room).find((p) => room.tokens[p] === token);
+  if (!seat) throw new RoomError(403, 'この対局の参加者として確認できませんでした');
+  return seat;
+}
+
+/**
+ * その手番を、このトークンの持ち主が打ってよいか。
+ * 自分の席はもちろん、CPU が受け持つ席は部屋を作った人が代わりに動かす。
+ * （サーバには常時動く仕組みが無いので、CPU の思考は主催者の端末が回している）
+ */
+function mayMoveFor(room, token, turn) {
+  if (room.tokens[turn] === token) return true;
+  return room.cpu.includes(turn) && room.tokens[1] === token;
 }
 
 export default async function handler(req, res) {
@@ -214,6 +237,7 @@ export default async function handler(req, res) {
       case 'create':  return await handleCreate(res, body);
       case 'join':    return await handleJoin(res, body);
       case 'poll':    return await handlePoll(res, req.query);
+      case 'start':   return await handleStart(res, body);
       case 'move':    return await handleMove(res, body);
       case 'say':     return await handleSay(res, body);
       case 'rematch': return await handleRematch(res, body);
@@ -246,19 +270,29 @@ async function handleCreate(res, body) {
   }
   if (!code) throw new RoomError(503, '部屋を作れませんでした。もう一度お試しください');
 
+  const seats = body.seats === 4 ? 4 : 2;
+  const variant = seats === 4 ? VARIANTS.four.id : VARIANTS.duo.id;
   const token = newToken();
-  const hostColor = isColor(body.color) ? body.color : DEFAULT_FIRST;
+
+  const tokens = {};
+  const chat = {};
+  for (let p = 1; p <= seats; p++) { tokens[p] = null; chat[p] = ''; }
+  tokens[1] = token;
+
   const room = {
     code,
     seq: 0,
     createdAt: Date.now(),
     updatedAt: Date.now(),
     status: 'waiting',
-    tokens: { 1: token, 2: null },
-    game: createGame(),
-    chat: { 1: '', 2: '' },
+    seats,
+    variant,
+    cpu: [],
+    tokens,
+    game: createGame(variant),
+    chat,
     // 参加者が決まるまでは仮の色を入れておき、入ってきたら本人の選んだ色にする
-    colors: { 1: hostColor, 2: partnerFor(hostColor) },
+    colors: fillColors({ 1: isColor(body.color) ? body.color : undefined }, seats),
   };
 
   await writeRoom(room, undefined);
@@ -269,20 +303,43 @@ async function handleJoin(res, body) {
   const code = requireCode(body.code);
   const token = newToken();
 
+  let seat = 0;
   const room = await updateRoom(code, (r) => {
-    // 既に 2 人そろっている部屋には入れない
-    if (r.tokens[2]) throw new RoomError(409, 'この部屋はもう対戦がはじまっています');
+    if (r.status === 'finished') throw new RoomError(409, 'この対局は終わっています');
 
-    r.tokens[2] = token;
-    r.status = 'playing';
+    // 空いている席のうち、いちばん若い番号に入る
+    seat = seatNumbers(r).find((p) => !r.tokens[p] && !r.cpu.includes(p)) || 0;
+    if (!seat) throw new RoomError(409, 'この部屋はもう席が埋まっています');
 
-    // 相手と同じ色は取れないので、その場合は空いている色にずらす
-    if (!r.colors) r.colors = { 1: DEFAULT_FIRST, 2: partnerFor(DEFAULT_FIRST) };
-    const wanted = isColor(body.color) ? body.color : partnerFor(r.colors[1]);
-    r.colors[2] = wanted === r.colors[1] ? firstAvailable(r.colors[1]) : wanted;
+    r.tokens[seat] = token;
+
+    // 他の人と同じ色は取れないので、その場合は空いている色にずらす
+    const taken = seatNumbers(r).filter((p) => p !== seat).map((p) => r.colors[p]);
+    const wanted = isColor(body.color) ? body.color : null;
+    r.colors[seat] = wanted && !taken.includes(wanted) ? wanted : firstAvailable(taken);
+
+    // 全部の席が埋まったらそのまま始める
+    if (filledSeats(r) >= r.seats) r.status = 'playing';
   });
 
-  return send(res, 200, { code, token, player: 2, ...publicView(room) });
+  return send(res, 200, { code, token, player: seat, ...publicView(room) });
+}
+
+/** 主催者が、空いている席を CPU に任せて始める。 */
+async function handleStart(res, body) {
+  const code = requireCode(body.code);
+  const token = String(body.token || '');
+
+  const room = await updateRoom(code, (r) => {
+    if (r.tokens[1] !== token) throw new RoomError(403, '部屋を作った人だけが始められます');
+    if (r.status === 'playing') return UNCHANGED;
+    if (r.status !== 'waiting') throw new RoomError(409, 'この部屋は始められません');
+
+    r.cpu = seatNumbers(r).filter((p) => !r.tokens[p]);
+    r.status = 'playing';
+  });
+
+  return send(res, 200, publicView(room));
 }
 
 async function handlePoll(res, query) {
@@ -301,17 +358,21 @@ async function handleMove(res, body) {
   const room = await updateRoom(code, (r) => {
     if (r.status !== 'playing') throw new RoomError(409, 'この対局は進行中ではありません');
 
-    const player = seatOf(r, String(token || ''));
-    if (r.game.turn !== player) throw new RoomError(409, 'あなたの手番ではありません');
+    seatOf(r, String(token || '')); // 参加者かどうかをまず確かめる
+    const player = r.game.turn;
+    if (!mayMoveFor(r, String(token || ''), player)) {
+      throw new RoomError(409, 'あなたの手番ではありません');
+    }
 
     // ここから先はクライアントを信用せず、ルールを一から確かめる
+    const v = variantOf(r.game);
     if (!r.game.hands[player].includes(pieceId)) {
       throw new RoomError(400, 'そのピースは手元にありません');
     }
-    if (!matchesPiece(pieceId, cells)) {
+    if (!matchesPiece(v, pieceId, cells)) {
       throw new RoomError(400, 'そのピースの形と一致しません');
     }
-    if (!canPlace(r.game.board, player, cells, isFirstMove(r.game, player))) {
+    if (!canPlace(v, r.game.board, player, cells, isFirstMove(r.game, player))) {
       throw new RoomError(400, 'そこには置けません');
     }
 
@@ -333,7 +394,6 @@ async function handleSay(res, body) {
 
   const room = await updateRoom(code, (r) => {
     const player = seatOf(r, token);
-    if (!r.chat) r.chat = { 1: '', 2: '' };
     if (r.chat[player] === text) return UNCHANGED; // 変わっていないなら書かない
     r.chat[player] = text;
   });
@@ -351,8 +411,8 @@ async function handleRematch(res, body) {
     // 相手が先に押していた場合は、その新しい盤面をそのまま使う
     if (r.status === 'playing') return UNCHANGED;
 
-    r.game = createGame();
-    r.chat = { 1: '', 2: '' };
+    r.game = createGame(r.variant);
+    for (const p of seatNumbers(r)) r.chat[p] = '';
     r.status = 'playing';
   });
 
