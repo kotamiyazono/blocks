@@ -209,6 +209,8 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
 .setup-actions { display: flex; flex-direction: column; align-items: center; gap: 6px; margin-top: 16px; }
 
 .waiting-dots { display: flex; gap: 7px; margin: 8px 0 20px; }
+/* クラス側で display を指定しているので、hidden も明示しないと効かない */
+.waiting-dots[hidden] { display: none; }
 .waiting-dots i {
   width: 9px; height: 9px; border-radius: 2.5px;
   background: var(--mist);
@@ -489,15 +491,16 @@ body.mode-local .score { padding: 3px 9px; }
 .chat-them {
   background: var(--surface-2);
   color: var(--ink);
-  animation: chat-in .18s ease;
 }
-.chat-them[hidden] { display: none; }
 .chat-them span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-@keyframes chat-in { from { opacity: 0; transform: translateY(3px); } }
+/* まだ何も来ていない状態。行の高さは保ったまま、控えめに見せる */
+.chat-them.is-empty { background: none; }
+.chat-them.is-empty span { color: var(--mist); font-size: 12px; }
+.chat-them.is-empty .chip { opacity: .3; }
 
 .chat-mine {
   border: 1px solid var(--line);

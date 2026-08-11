@@ -922,17 +922,24 @@ function onRoomUpdate(data) {
 
 /* ---- ひとこと ---- */
 
-/** 相手の行を今の内容に合わせる。自分の入力欄には触らない。 */
+const CHAT_PLACEHOLDER = '相手のひとこと';
+
+/**
+ * 相手の行を今の内容に合わせる。自分の入力欄には触らない。
+ * 空でも行そのものは残す。消すと高さが変わって盤面が伸び縮みしてしまう。
+ */
 function renderChat(chat) {
   if (!chat || !state.online) return;
   const theirs = (chat[state.myPlayer === 1 ? 2 : 1] || '').trim();
 
-  if (theirs !== el.chatThemText.textContent) {
-    el.chatThemText.textContent = theirs;
+  if (theirs !== (el.chatThem.dataset.text || '')) {
+    el.chatThem.dataset.text = theirs;
     // 相手が打ち込んでいる間は見に行く間隔を詰めて、文字が流れて見えるようにする
     if (state.online.watcher) state.online.watcher.hurry();
   }
-  el.chatThem.hidden = theirs.length === 0;
+
+  el.chatThem.classList.toggle('is-empty', theirs.length === 0);
+  el.chatThemText.textContent = theirs || CHAT_PLACEHOLDER;
 }
 
 let chatTimer = null;
@@ -967,8 +974,9 @@ function resetChat() {
   clearTimeout(chatTimer);
   chatPending = null;
   el.chatInput.value = '';
-  el.chatThemText.textContent = '';
-  el.chatThem.hidden = true;
+  el.chatThem.dataset.text = '';
+  el.chatThem.classList.add('is-empty');
+  el.chatThemText.textContent = CHAT_PLACEHOLDER;
 }
 
 async function placeOnline(pieceId, cells) {

@@ -173,8 +173,9 @@
 
   <!-- ひとこと（オンライン対戦のみ）。自分で打つものなので手元に置く -->
   <div class="chat" id="chat" hidden>
-    <p class="chat-line chat-them" id="chat-them" hidden>
-      <i class="chip" id="chat-them-chip"></i><span id="chat-them-text"></span>
+    <!-- 相手の行は空でも出しておく。出たり消えたりすると盤面の大きさが変わってしまう -->
+    <p class="chat-line chat-them is-empty" id="chat-them">
+      <i class="chip" id="chat-them-chip"></i><span id="chat-them-text">相手のひとこと</span>
     </p>
     <div class="chat-line chat-mine">
       <i class="chip" id="chat-my-chip"></i>
