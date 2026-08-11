@@ -52,6 +52,40 @@ const isConflict = (error) =>
   error?.name === 'BlobPreconditionFailedError' ||
   /precondition/i.test(error?.message || '');
 
+/**
+ * ETag から弱い印（W/）を外す。
+ * 盤面は手が進むほど大きくなり、ある大きさを超えると転送時に圧縮される。
+ * すると読み取りの ETag が W/"..." という弱い形になるが、条件付き書き込みの
+ * ifMatch は強い形しか受け付けない。そのままでは中盤から必ず書けなくなる。
+ */
+const strongEtag = (etag) => (typeof etag === 'string' ? etag.replace(/^W\//, '') : etag);
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * 置き場所そのものが一時的に応じなかっただけの失敗か。
+ * 保管サービスは稀に 500 を返したり詰まったりする。少し待てば通ることが多いので、
+ * こちらの言い分（手番違いなど）と区別して数回だけやり直す。
+ */
+const isTransient = (error) =>
+  !isConflict(error) &&
+  /50\d|rate.?limit|fetch failed|network|timeout|unavailable|socket/i.test(error?.message || '');
+
+/** 一過性の失敗なら少し待って繰り返す。 */
+async function resilient(operation) {
+  let lastError;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (!isTransient(error)) throw error;
+      lastError = error;
+      await sleep(150 * (attempt + 1));
+    }
+  }
+  throw lastError;
+}
+
 const randomString = (length, alphabet) => {
   const bytes = new Uint8Array(length);
   crypto.getRandomValues(bytes);
@@ -75,7 +109,7 @@ const requireCode = (value) => {
 
 /** 部屋を読む。無ければ null。期限切れならその場で消して無かったことにする。 */
 async function readRoom(code) {
-  const found = await get(pathFor(code), { access: 'private', useCache: false });
+  const found = await resilient(() => get(pathFor(code), { access: 'private', useCache: false }));
   if (!found || found.statusCode !== 200) return null;
 
   let room;
@@ -91,7 +125,7 @@ async function readRoom(code) {
     return null;
   }
 
-  return { room, etag: found.blob.etag };
+  return { room, etag: strongEtag(found.blob.etag) };
 }
 
 /**
@@ -101,13 +135,14 @@ async function readRoom(code) {
 async function writeRoom(room, etag) {
   room.seq += 1;
   room.updatedAt = Date.now();
-  return put(pathFor(room.code), JSON.stringify(room), {
+  // ifMatch を付けているので、やり直しで同じ手が二重に入ることはない
+  return resilient(() => put(pathFor(room.code), JSON.stringify(room), {
     access: 'private',
     contentType: 'application/json',
     allowOverwrite: true,
     addRandomSuffix: false,
     ...(etag ? { ifMatch: etag } : {}),
-  });
+  }));
 }
 
 /** mutate がこれを返したら、中身が変わっていないので書き込まない。 */
