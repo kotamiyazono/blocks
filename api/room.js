@@ -4,14 +4,16 @@
  * 対局中の盤面だけをプライベートな Blob に置き、終わったら消す。
  * 勝敗も棋譜もプレイヤー情報も残さない。部屋は 2 時間触られなければ自動で消える。
  *
- *   POST /api/room?action=create            → 部屋を作る
- *   POST /api/room?action=join   { code }   → 相手として参加する
- *   GET  /api/room?code=..&since=..         → 盤面を取りに行く（ポーリング）
- *   POST /api/room?action=move   { .. }     → 一手打つ（サーバ側でルール検証）
- *   POST /api/room?action=leave  { .. }     → 部屋を消す
+ *   POST /api/room?action=create  { color }        → 部屋を作る
+ *   POST /api/room?action=join    { code, color }  → 相手として参加する
+ *   GET  /api/room?code=..&since=..                → 盤面を取りに行く（ポーリング）
+ *   POST /api/room?action=move    { .. }           → 一手打つ（サーバ側でルール検証）
+ *   POST /api/room?action=say     { .. }           → ひとことを書き換える
+ *   POST /api/room?action=rematch { .. }           → もう一局
+ *   POST /api/room?action=leave   { .. }           → 部屋を消す
  */
 
-import { put, get, del } from '@vercel/blob';
+import { put, get, del, BlobPreconditionFailedError } from '@vercel/blob';
 import {
   createGame,
   applyMove,
@@ -24,6 +26,7 @@ import { isColor, partnerFor, firstAvailable, DEFAULT_FIRST } from '../js/palett
 /** 見間違えやすい文字（O/0, I/1 など）を外した部屋コード用の英数字。 */
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const CODE_LENGTH = 4;
+const CHAT_LIMIT = 140;
 
 /** 対局中の部屋の寿命。これを過ぎたものは読まれた時点で消す。 */
 const ROOM_TTL_MS = 2 * 60 * 60 * 1000;
@@ -31,6 +34,23 @@ const ROOM_TTL_MS = 2 * 60 * 60 * 1000;
 const FINISHED_TTL_MS = 5 * 60 * 1000;
 
 const pathFor = (code) => `rooms/${code}.json`;
+
+/** 呼び出し側にそのまま返したい失敗。 */
+class RoomError extends Error {
+  constructor(status, message) {
+    super(message);
+    this.status = status;
+  }
+}
+
+/**
+ * 「読んだときから変わっていた」ことによる書き込み失敗かどうか。
+ * SDK が投げる例外は name が当てにならないので、型と文面の両方で確かめる。
+ */
+const isConflict = (error) =>
+  error instanceof BlobPreconditionFailedError ||
+  error?.name === 'BlobPreconditionFailedError' ||
+  /precondition/i.test(error?.message || '');
 
 const randomString = (length, alphabet) => {
   const bytes = new Uint8Array(length);
@@ -43,15 +63,24 @@ const randomString = (length, alphabet) => {
 const newCode = () => randomString(CODE_LENGTH, CODE_ALPHABET);
 const newToken = () => randomString(24, 'abcdefghijklmnopqrstuvwxyz0123456789');
 
-/** 部屋を読む。無ければ null。期限切れならその場で消して null 扱いにする。 */
+const requireCode = (value) => {
+  const code = String(value || '').toUpperCase();
+  if (code.length !== CODE_LENGTH) throw new RoomError(400, '部屋コードが正しくありません');
+  return code;
+};
+
+/* ========================================================================
+   保管
+   ======================================================================== */
+
+/** 部屋を読む。無ければ null。期限切れならその場で消して無かったことにする。 */
 async function readRoom(code) {
   const found = await get(pathFor(code), { access: 'private', useCache: false });
   if (!found || found.statusCode !== 200) return null;
 
-  const text = await new Response(found.stream).text();
   let room;
   try {
-    room = JSON.parse(text);
+    room = JSON.parse(await new Response(found.stream).text());
   } catch {
     return null;
   }
@@ -81,6 +110,37 @@ async function writeRoom(room, etag) {
   });
 }
 
+/** mutate がこれを返したら、中身が変わっていないので書き込まない。 */
+const UNCHANGED = Symbol('unchanged');
+
+/**
+ * 読んで、書き換えて、書く。
+ * 途中で相手に先を越されたら読み直してやり直すので、
+ * 判断（手番かどうかなど）は必ず最新の盤面に対して行われる。
+ */
+async function updateRoom(code, mutate) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const found = await readRoom(code);
+    if (!found) throw new RoomError(404, 'この部屋は閉じました');
+
+    const outcome = mutate(found.room);
+    if (outcome === UNCHANGED) return found.room;
+
+    try {
+      await writeRoom(found.room, found.etag);
+      return found.room;
+    } catch (error) {
+      if (isConflict(error)) continue; // 割り込まれた。読み直してやり直す
+      throw error;
+    }
+  }
+  throw new RoomError(409, '操作が重なりました。もう一度お試しください');
+}
+
+/* ========================================================================
+   受け答え
+   ======================================================================== */
+
 /** クライアントに返す形。相手のトークンは絶対に含めない。 */
 function publicView(room, seq) {
   if (seq !== undefined && seq === room.seq) {
@@ -97,34 +157,18 @@ function publicView(room, seq) {
   };
 }
 
-/**
- * 書き込みが相手とぶつかったら、読み直して一度だけやり直す。
- * ひとことは打つたびに書き込むので、着手と重なることがある。
- */
-async function writeWithRetry(code, mutate) {
-  for (let attempt = 0; attempt < 2; attempt++) {
-    const found = await readRoom(code);
-    if (!found) return null;
-    try {
-      const result = mutate(found.room);
-      if (result === false) return found.room;
-      await writeRoom(found.room, found.etag);
-      return found.room;
-    } catch (error) {
-      if (error && error.name === 'BlobPreconditionFailedError') continue;
-      throw error;
-    }
-  }
-  return null;
-}
-
 const send = (res, status, body) => {
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   res.setHeader('Cache-Control', 'no-store, max-age=0');
   res.status(status).send(JSON.stringify(body));
 };
 
-const fail = (res, status, message) => send(res, status, { error: message });
+/** その部屋の参加者としてどちらの側か。名乗れなければ 403。 */
+function seatOf(room, token) {
+  const player = room.tokens[1] === token ? 1 : room.tokens[2] === token ? 2 : 0;
+  if (!player) throw new RoomError(403, 'この対局の参加者として確認できませんでした');
+  return player;
+}
 
 export default async function handler(req, res) {
   try {
@@ -133,23 +177,27 @@ export default async function handler(req, res) {
 
     switch (action) {
       case 'create':  return await handleCreate(res, body);
-      case 'join':   return await handleJoin(res, body);
-      case 'poll':   return await handlePoll(res, req.query);
+      case 'join':    return await handleJoin(res, body);
+      case 'poll':    return await handlePoll(res, req.query);
       case 'move':    return await handleMove(res, body);
       case 'say':     return await handleSay(res, body);
       case 'rematch': return await handleRematch(res, body);
       case 'leave':   return await handleLeave(res, body);
-      default:        return fail(res, 400, '不正なリクエストです');
+      default:        throw new RoomError(400, '不正なリクエストです');
     }
   } catch (error) {
-    // ifMatch 不一致（同時書き込み）はクライアントが読み直せば回復できる
-    if (error && error.name === 'BlobPreconditionFailedError') {
-      return fail(res, 409, '盤面が更新されました。読み込み直してください');
+    if (error instanceof RoomError) return send(res, error.status, { error: error.message });
+    if (isConflict(error)) {
+      return send(res, 409, { error: '盤面が更新されました。読み込み直してください' });
     }
     console.error('[room]', error);
-    return fail(res, 500, 'サーバ側で問題が起きました');
+    return send(res, 500, { error: 'サーバ側で問題が起きました' });
   }
 }
+
+/* ========================================================================
+   それぞれの操作
+   ======================================================================== */
 
 async function handleCreate(res, body) {
   // 万一コードがぶつかったら引き直す
@@ -161,7 +209,7 @@ async function handleCreate(res, body) {
       break;
     }
   }
-  if (!code) return fail(res, 503, '部屋を作れませんでした。もう一度お試しください');
+  if (!code) throw new RoomError(503, '部屋を作れませんでした。もう一度お試しください');
 
   const token = newToken();
   const hostColor = isColor(body.color) ? body.color : DEFAULT_FIRST;
@@ -183,143 +231,107 @@ async function handleCreate(res, body) {
 }
 
 async function handleJoin(res, body) {
-  const code = String(body.code || '').toUpperCase();
-  if (code.length !== CODE_LENGTH) return fail(res, 400, '部屋コードが正しくありません');
-
-  const found = await readRoom(code);
-  if (!found) return fail(res, 404, 'この部屋は見つかりませんでした。時間が経って閉じたのかもしれません');
-
-  const { room, etag } = found;
-
-  // 既に 2 人そろっている部屋には入れない
-  if (room.tokens[2]) return fail(res, 409, 'この部屋はもう対戦がはじまっています');
-
+  const code = requireCode(body.code);
   const token = newToken();
-  room.tokens[2] = token;
-  room.status = 'playing';
 
-  // 参加者の色。相手と同じ色は取れないので、その場合は空いている色にずらす
-  if (!room.colors) room.colors = { 1: DEFAULT_FIRST, 2: partnerFor(DEFAULT_FIRST) };
-  const wanted = isColor(body.color) ? body.color : partnerFor(room.colors[1]);
-  room.colors[2] = wanted === room.colors[1] ? firstAvailable(room.colors[1]) : wanted;
+  const room = await updateRoom(code, (r) => {
+    // 既に 2 人そろっている部屋には入れない
+    if (r.tokens[2]) throw new RoomError(409, 'この部屋はもう対戦がはじまっています');
 
-  await writeRoom(room, etag);
+    r.tokens[2] = token;
+    r.status = 'playing';
+
+    // 相手と同じ色は取れないので、その場合は空いている色にずらす
+    if (!r.colors) r.colors = { 1: DEFAULT_FIRST, 2: partnerFor(DEFAULT_FIRST) };
+    const wanted = isColor(body.color) ? body.color : partnerFor(r.colors[1]);
+    r.colors[2] = wanted === r.colors[1] ? firstAvailable(r.colors[1]) : wanted;
+  });
+
   return send(res, 200, { code, token, player: 2, ...publicView(room) });
 }
 
 async function handlePoll(res, query) {
-  const code = String(query.code || '').toUpperCase();
-  if (code.length !== CODE_LENGTH) return fail(res, 400, '部屋コードが正しくありません');
-
+  const code = requireCode(query.code);
   const found = await readRoom(code);
-  if (!found) return fail(res, 404, 'この部屋は閉じました');
+  if (!found) throw new RoomError(404, 'この部屋は閉じました');
 
   const since = query.since === undefined ? undefined : Number(query.since);
   return send(res, 200, publicView(found.room, Number.isFinite(since) ? since : undefined));
 }
 
 async function handleMove(res, body) {
-  const code = String(body.code || '').toUpperCase();
-  const token = String(body.token || '');
-  const pieceId = String(body.pieceId || '');
-  const cells = body.cells;
+  const code = requireCode(body.code);
+  const { token, pieceId, cells } = body;
 
-  const found = await readRoom(code);
-  if (!found) return fail(res, 404, 'この部屋は閉じました');
+  const room = await updateRoom(code, (r) => {
+    if (r.status !== 'playing') throw new RoomError(409, 'この対局は進行中ではありません');
 
-  const { room, etag } = found;
-  if (room.status !== 'playing') return fail(res, 409, 'この対局は進行中ではありません');
+    const player = seatOf(r, String(token || ''));
+    if (r.game.turn !== player) throw new RoomError(409, 'あなたの手番ではありません');
 
-  // 名乗ったトークンがどちらのプレイヤーのものか
-  const player = room.tokens[1] === token ? 1 : room.tokens[2] === token ? 2 : 0;
-  if (!player) return fail(res, 403, 'この対局の参加者として確認できませんでした');
-  if (room.game.turn !== player) return fail(res, 409, 'あなたの手番ではありません');
+    // ここから先はクライアントを信用せず、ルールを一から確かめる
+    if (!r.game.hands[player].includes(pieceId)) {
+      throw new RoomError(400, 'そのピースは手元にありません');
+    }
+    if (!matchesPiece(pieceId, cells)) {
+      throw new RoomError(400, 'そのピースの形と一致しません');
+    }
+    if (!canPlace(r.game.board, player, cells, isFirstMove(r.game, player))) {
+      throw new RoomError(400, 'そこには置けません');
+    }
 
-  // ここから先はクライアントを信用せず、ルールを一から確かめる
-  if (!room.game.hands[player].includes(pieceId)) {
-    return fail(res, 400, 'そのピースは手元にありません');
-  }
-  if (!matchesPiece(pieceId, cells)) {
-    return fail(res, 400, 'そのピースの形と一致しません');
-  }
-  if (!canPlace(room.game.board, player, cells, isFirstMove(room.game, player))) {
-    return fail(res, 400, 'そこには置けません');
-  }
+    r.game = applyMove(r.game, player, pieceId, cells);
+    if (r.game.status === 'finished') r.status = 'finished';
+  });
 
-  room.game = applyMove(room.game, player, pieceId, cells);
-  if (room.game.status === 'finished') room.status = 'finished';
-
-  await writeRoom(room, etag);
   return send(res, 200, publicView(room));
 }
 
 /** ひとことの現在地を書き換える。履歴は持たず、部屋と一緒に消える。 */
-const CHAT_LIMIT = 140;
-
 async function handleSay(res, body) {
-  const code = String(body.code || '').toUpperCase();
+  const code = requireCode(body.code);
   const token = String(body.token || '');
   // 改行や制御文字は 1 行表示が壊れるので落とす
   const text = String(body.text ?? '')
     .replace(/[\u0000-\u001F\u007F]/g, ' ')
     .slice(0, CHAT_LIMIT);
 
-  if (code.length !== CODE_LENGTH) return fail(res, 400, '部屋コードが正しくありません');
-
-  const room = await writeWithRetry(code, (r) => {
-    const player = r.tokens[1] === token ? 1 : r.tokens[2] === token ? 2 : 0;
-    if (!player) {
-      const error = new Error('forbidden');
-      error.forbidden = true;
-      throw error;
-    }
+  const room = await updateRoom(code, (r) => {
+    const player = seatOf(r, token);
     if (!r.chat) r.chat = { 1: '', 2: '' };
-    if (r.chat[player] === text) return false; // 変わっていないなら書かない
+    if (r.chat[player] === text) return UNCHANGED; // 変わっていないなら書かない
     r.chat[player] = text;
-  }).catch((error) => {
-    if (error && error.forbidden) return 'forbidden';
-    throw error;
   });
 
-  if (room === 'forbidden') return fail(res, 403, 'この対局の参加者として確認できませんでした');
-  if (!room) return fail(res, 404, 'この部屋は閉じました');
   return send(res, 200, publicView(room));
 }
 
 /** 同じ相手ともう一局。盤面を新しくするだけで、前局の内容はどこにも残さない。 */
 async function handleRematch(res, body) {
-  const code = String(body.code || '').toUpperCase();
+  const code = requireCode(body.code);
   const token = String(body.token || '');
 
-  const found = await readRoom(code);
-  if (!found) return fail(res, 404, 'この部屋は閉じました');
+  const room = await updateRoom(code, (r) => {
+    seatOf(r, token);
+    // 相手が先に押していた場合は、その新しい盤面をそのまま使う
+    if (r.status === 'playing') return UNCHANGED;
 
-  const { room, etag } = found;
-  if (room.tokens[1] !== token && room.tokens[2] !== token) {
-    return fail(res, 403, 'この対局の参加者として確認できませんでした');
-  }
-  // 相手が先に押していた場合は、その新しい盤面をそのまま使う
-  if (room.status === 'playing') return send(res, 200, publicView(room));
+    r.game = createGame();
+    r.chat = { 1: '', 2: '' };
+    r.status = 'playing';
+  });
 
-  room.game = createGame();
-  room.status = 'playing';
-
-  await writeRoom(room, etag);
   return send(res, 200, publicView(room));
 }
 
 async function handleLeave(res, body) {
-  const code = String(body.code || '').toUpperCase();
+  const code = requireCode(body.code);
   const token = String(body.token || '');
-  if (code.length !== CODE_LENGTH) return fail(res, 400, '部屋コードが正しくありません');
 
   const found = await readRoom(code);
   if (!found) return send(res, 200, { ok: true }); // すでに無いなら何もしなくていい
 
-  const { room } = found;
-  const isMember = room.tokens[1] === token || room.tokens[2] === token;
-  if (!isMember) return fail(res, 403, 'この対局の参加者として確認できませんでした');
-
+  seatOf(found.room, token);
   await del(pathFor(code)).catch(() => {});
   return send(res, 200, { ok: true });
 }
