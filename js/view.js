@@ -6,8 +6,8 @@
 
 import { N, START, ORIENTATIONS, extent } from './rules.js';
 
-/** CSS の .board の padding と一致させる（座標計算に使う）。 */
-const BOARD_PADDING = 7;
+/** CSS の .board の padding と一致させる（座標計算に使う）。枠を持たないので 0。 */
+const BOARD_PADDING = 0;
 
 /** 盤面の 196 マスを一度だけ作る。以降はクラスの付け替えだけで更新する。 */
 export function buildBoard(el) {
@@ -116,7 +116,22 @@ export function buildTray(el, { hand, player, onTap }) {
 
   el.replaceChildren(frag);
   el.dataset.signature = signature;
+  syncTraySpacers(el);
   return true;
+}
+
+/**
+ * カルーセル両端の余白を、実際のタイル幅から決める。
+ * これが足りないと、いちばん端のピースを中央まで送れず、
+ * 見えている位置と選んでいるピースが食い違う。
+ */
+export function syncTraySpacers(el) {
+  const tile = el.firstElementChild;
+  if (!tile) return;
+  const want = Math.max(0, Math.round(el.clientWidth / 2 - tile.offsetWidth / 2));
+  if (el.dataset.spacer === String(want)) return;
+  el.dataset.spacer = String(want);
+  el.style.setProperty('--spacer', `${want}px`);
 }
 
 /** 選択の枠と、置けないピースの表示だけを更新する（組み直しはしない）。 */

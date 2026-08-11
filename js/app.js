@@ -30,6 +30,7 @@ import {
   buildTray,
   updateTray,
   updateTrayFocus,
+  syncTraySpacers,
   centeredPiece,
   centerPiece,
 } from './view.js';
@@ -76,14 +77,13 @@ const el = {
   screens: $$('.screen'),
   board: $('#board'),
   status: $('#status'),
-  scores: $$('.hud .score'),
   panelNear: $('.panel-near'),
   panelFar: $('.panel-far'),
   toast: $('#toast'),
   sheetRules: $('#sheet-rules'),
   sheetResult: $('#sheet-result'),
-  undo: $('#btn-undo'),
-  quit: $('#btn-quit'),
+  undo: $$('.js-undo'),
+  quit: $$('.js-quit'),
   inviteUrl: $('#invite-url'),
   onlineError: $('#online-error'),
   joiningNote: $('#joining-note'),
@@ -176,7 +176,6 @@ function render() {
   }
   paintPanels();
 
-  renderScores();
   renderStatus();
   updateBoard();
 }
@@ -219,7 +218,10 @@ function buildPanels() {
     } else {
       // 最初は大きいピースから捌くのが定石なので、いちばん大きいものを真ん中に
       const largest = [...g.hands[player]].sort((a, b) => PIECE_SIZE[b] - PIECE_SIZE[a])[0];
-      if (largest) centerPiece(tray, largest, false);
+      if (largest) {
+        tray.dataset.autoScroll = '1';
+        centerPiece(tray, largest, false);
+      }
     }
   }
 }
@@ -233,6 +235,7 @@ function paintPanels() {
     node.classList.toggle('is-idle', !mine);
 
     const tray = $('.tray', node);
+    syncTraySpacers(tray); // 画面の向きやモードで幅が変わっても端まで送れるように
     updateTray(tray, {
       selectedId: mine && state.sel ? state.sel.pieceId : null,
       orientationIndex: state.sel ? state.sel.oi : 0,
@@ -242,17 +245,8 @@ function paintPanels() {
     updateTrayFocus(tray);
   }
 
-  el.undo.hidden = state.mode === 'online' || state.history.length === 0;
-}
-
-function renderScores() {
-  const g = state.game;
-  for (const node of el.scores) {
-    const player = Number(node.dataset.player);
-    $('.score-name', node).textContent = labelFor(player);
-    $('.score-num', node).textContent = String(remainingSquares(g, player));
-    node.classList.toggle('is-turn', g.turn === player && g.status === 'playing');
-  }
+  const canUndo = state.mode !== 'online' && state.history.length > 0;
+  for (const button of el.undo) button.hidden = !canUndo;
 }
 
 function renderStatus() {
@@ -275,11 +269,12 @@ function renderStatus() {
 
   const who = state.mode === 'local' ? `<b>${labelFor(g.turn)}の番</b>` : '<b>あなたの番</b>';
 
+  // 回転と反転にボタンを置いていないので、やり方は常に添えておく
   let hint;
   if (state.sel && !placeableSet().has(state.sel.pieceId)) {
     hint = 'このピースは今は置けません';
   } else if (isFirstMove(g, g.turn)) {
-    hint = '自分の色の印を覆うように置きます';
+    hint = '印を覆うように置く ・ タップで回転';
   } else {
     hint = '駒をタップで回転・長押しで反転';
   }
@@ -291,12 +286,11 @@ function updateBoard() {
   const ghost = currentGhost();
   renderBoard(el.board, state.game, ghost);
 
-  // ボタンの有効・無効は手番のパネルにだけ効かせる
+  // 「置く」は手番のパネルのものだけを生かす
   const ready = Boolean(ghost && ghost.valid) && !state.busy;
   for (const { node, player } of panelList()) {
     const mine = state.game.turn === player && canAct();
     $('.ctl-place', node).disabled = !(mine && ready);
-    for (const button of $$('.ctl-ghost', node)) button.disabled = !(mine && state.sel);
   }
 }
 
@@ -385,6 +379,12 @@ function setupCarousel(tray, player) {
   let frame = null;
   let settle = null;
 
+  // こちらから送った分のスクロールで選択を上書きしないための目印。
+  // 指が触れた時点で「本人が動かしている」と判断して外す。
+  const handOver = () => { delete tray.dataset.autoScroll; };
+  tray.addEventListener('pointerdown', handOver, { passive: true });
+  tray.addEventListener('wheel', handOver, { passive: true });
+
   tray.addEventListener('scroll', () => {
     // 大きさと濃さは指の動きにそのまま追従させる
     if (frame === null) {
@@ -396,6 +396,7 @@ function setupCarousel(tray, player) {
     // 止まったところで選択を確定する
     clearTimeout(settle);
     settle = setTimeout(() => {
+      if (tray.dataset.autoScroll) return; // こちらから送った分は選択に触れない
       if (!state.game || state.game.turn !== player || !canAct()) return;
       const id = centeredPiece(tray);
       if (!id || (state.sel && state.sel.pieceId === id)) return;
@@ -418,6 +419,7 @@ function tapPiece(tray, player, pieceId) {
   }
   if (state.sel && state.sel.pieceId === pieceId) return; // 回転はジェスチャ側で処理する
   // スクロールの到着を待たずにその場で選ぶ（待たされる感じを無くす）
+  tray.dataset.autoScroll = '1';
   centerPiece(tray, pieceId);
   selectPiece(pieceId);
 }
@@ -660,14 +662,10 @@ document.addEventListener('keydown', (event) => {
   handler();
 });
 
-/* ---- 操作ボタン（手前・向かい側どちらのパネルからでも同じ処理） ---- */
+/* ---- 「置く」（手前・向かい側どちらのパネルからでも同じ処理） ---- */
 for (const panel of [el.panelNear, el.panelFar]) {
   panel.addEventListener('click', (event) => {
-    const button = event.target.closest('.ctl');
-    if (!button) return;
-    if (button.dataset.act === 'place') placeSelection();
-    else if (button.dataset.act === 'rotate') rotateSelection();
-    else if (button.dataset.act === 'flip') flipSelection();
+    if (event.target.closest('.ctl-place')) placeSelection();
   });
 }
 
@@ -1130,18 +1128,20 @@ el.sheetRules.addEventListener('click', (event) => {
   if (event.target === el.sheetRules) el.sheetRules.hidden = true;
 });
 
-el.undo.addEventListener('click', undo);
+for (const button of el.undo) button.addEventListener('click', undo);
 
 // 誤って対局を終わらせないよう、二度押しで確定させる
-el.quit.addEventListener('click', () => {
-  if (!state.quitArmed) {
-    state.quitArmed = true;
-    toast('もう一度押すと対局を終わります');
-    setTimeout(() => { state.quitArmed = false; }, 3000);
-    return;
-  }
-  goHome();
-});
+for (const button of el.quit) {
+  button.addEventListener('click', () => {
+    if (!state.quitArmed) {
+      state.quitArmed = true;
+      toast('もう一度押すと対局を終わります');
+      setTimeout(() => { state.quitArmed = false; }, 3000);
+      return;
+    }
+    goHome();
+  });
+}
 
 /* ========================================================================
    起動

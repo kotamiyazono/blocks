@@ -112,7 +112,7 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
 .link-btn:active { opacity: .6; }
 
 .icon-btn {
-  width: 36px; height: 36px;
+  width: 32px; height: 32px;
   display: grid; place-items: center;
   border-radius: 10px;
   color: var(--mist);
@@ -218,39 +218,22 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
 /* --------------------------------------------------------------------------
    対局画面
    -------------------------------------------------------------------------- */
-.screen-game { gap: 4px; padding: 0 10px; }
+/* 盤面をできるだけ大きく取りたいので、周りの余白はぎりぎりまで削っている */
+.screen-game { gap: 2px; padding: 0 4px; }
 
 .board-area {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
 }
 
-.hud {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding-top: 6px;
-}
-/* 対面対戦では画面の上端に向かい側のパネルが来るので、切り欠きの回避はそちらに任せる */
-body:not(.mode-local) .hud { padding-top: calc(6px + env(safe-area-inset-top)); }
-.scores { display: flex; gap: 8px; flex: 1; justify-content: center; }
-.score {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 11px;
-  border-radius: 999px;
-  border: 1px solid transparent;
-  opacity: .38;
-  transition: opacity .2s ease, border-color .2s ease, background .2s ease;
-}
-.score.is-turn { opacity: 1; border-color: var(--line); background: var(--surface); }
-.score-name { font-size: 12px; font-weight: 600; }
-.score-num { font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--mist); }
+/* 残りマスの数字は置いていない。手元のカルーセルに残っているピースそのものが
+   そのまま「残り」を表しているので、数で言い直す必要がない。
+   手番も、明るいほうのパネルと下の一文で分かる。 */
+.board-area { padding-top: calc(2px + env(safe-area-inset-top)); }
+body.mode-local .board-area { padding-top: 0; }
 
 /* 盤面は縦横のうち狭いほうに合わせて正方形にする */
 .board-frame {
@@ -261,6 +244,8 @@ body:not(.mode-local) .hud { padding-top: calc(6px + env(safe-area-inset-top)); 
   justify-content: center;
   container-type: size;
 }
+/* 枠も台紙も持たせず、マスの並びだけで盤に見せる。
+   囲いが無いぶん同じ画面幅でも盤を大きく取れる。 */
 .board {
   width: min(92vw, 58vh);          /* コンテナクエリ非対応時の保険 */
   width: min(100cqw, 100cqh);
@@ -268,11 +253,6 @@ body:not(.mode-local) .hud { padding-top: calc(6px + env(safe-area-inset-top)); 
   display: grid;
   grid-template-columns: repeat(14, 1fr);
   gap: 2px;
-  padding: 7px;
-  border-radius: var(--radius);
-  background: var(--surface);
-  border: 1px solid var(--line);
-  box-shadow: var(--shadow-1);
   touch-action: none;
   user-select: none;
 }
@@ -319,11 +299,12 @@ body:not(.mode-local) .hud { padding-top: calc(6px + env(safe-area-inset-top)); 
 }
 
 .status {
-  min-height: 20px;
+  flex: none;
+  min-height: 17px;
   text-align: center;
   font-size: 12px;
+  line-height: 1.4;
   color: var(--mist);
-  padding-bottom: 2px;
 }
 .status b { color: var(--ink); font-weight: 600; }
 
@@ -332,26 +313,47 @@ body:not(.mode-local) .hud { padding-top: calc(6px + env(safe-area-inset-top)); 
    対面対戦では向かい側のパネルを 180° 回して、相手から正しく見えるようにする。
    盤面そのものは実物のブロックス同様、回さない。
    -------------------------------------------------------------------------- */
+/* 持ちピースと「置く」を 1 行にまとめて、その分を丸ごと盤面に回している。
+   回転と反転はボタンを置かず、駒へのタップと長押しで行う。 */
 .panel {
+  /* 盤面は残りを埋めるので、パネル側は自分の高さを譲らないようにする。
+     ここが縮むと持ちピースが画面の外に押し出されてしまう。 */
+  flex: none;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 6px 0;
+  gap: 4px;
+  padding: 4px 0;
   transition: opacity .2s ease;
 }
+.panel-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+
+/* やめる・待ったは使う頻度が低いので、縦に積んで細い列に収める。
+   対面ではパネルごと回るので、どちらの側からも自分の手元に来る。 */
+.panel-tools {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  width: 30px;
+}
+.panel-tools .icon-btn { width: 30px; height: 26px; font-size: 14px; opacity: .5; }
+.panel-tools .icon-btn:active { opacity: 1; }
 .panel[hidden] { display: none; }
 /* 180° 回すので、画面の上端に空けたい余白は要素側では下に指定する */
 .panel-far {
   transform: rotate(180deg);
-  padding-bottom: calc(6px + env(safe-area-inset-top));
+  padding-bottom: calc(4px + env(safe-area-inset-top));
 }
-.panel-near { padding-bottom: calc(6px + env(safe-area-inset-bottom)); }
+.panel-near { padding-bottom: calc(8px + env(safe-area-inset-bottom)); }
 .panel.is-idle { opacity: .3; pointer-events: none; }
 
-.controls { display: flex; gap: 7px; justify-content: center; align-items: center; }
 .ctl {
-  min-height: var(--tap);
-  padding: 11px 16px;
   border-radius: 12px;
   border: 1px solid var(--line);
   background: var(--surface);
@@ -360,30 +362,20 @@ body:not(.mode-local) .hud { padding-top: calc(6px + env(safe-area-inset-top)); 
   font-weight: 600;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
   box-shadow: var(--shadow-1);
   transition: transform .08s ease, opacity .12s ease;
 }
 .ctl:active { transform: scale(.97); }
 .ctl:disabled { opacity: .42; cursor: default; }
-.ctl-icon { font-size: 15px; line-height: 1; }
-.ctl-place { flex: 1 1 auto; max-width: 220px; justify-content: center; }
 
-/* 回転・反転は駒へのタップと長押しでもできる。同じ形のボタンだが控えめに置く */
-.ctl-ghost {
+/* 持ちピースの右に添える確定ボタン。カルーセルと同じ高さにして 1 行に収める */
+.ctl-place {
   flex: 0 0 auto;
-  width: 56px;
-  min-height: 48px;
-  padding: 5px 4px;
-  flex-direction: column;
-  gap: 2px;
-  justify-content: center;
-  opacity: .55;
+  width: 66px;
+  height: calc(var(--tile) + 8px);
+  font-size: 14px;
 }
-.ctl-ghost .ctl-icon { font-size: 17px; }
-.ctl-ghost .ctl-label { font-size: 9.5px; font-weight: 600; letter-spacing: .04em; }
-.ctl-ghost:active { opacity: .9; }
-.ctl-ghost:disabled { opacity: .25; }
 .ctl-place:not(:disabled) { background: var(--ink); border-color: var(--ink); color: var(--bg); }
 
 /* --------------------------------------------------------------------------
@@ -394,6 +386,11 @@ body:not(.mode-local) .hud { padding-top: calc(6px + env(safe-area-inset-top)); 
 :root { --tile: 66px; }
 
 .tray {
+  /* 中央の判定に offsetLeft を使うので、その基準をこの要素自身にしておく。
+     これが無いと、左に置いたボタン列のぶんだけ座標がずれる。 */
+  position: relative;
+  flex: 1;
+  min-width: 0;
   display: flex;
   align-items: center;
   overflow-x: auto;
@@ -406,11 +403,12 @@ body:not(.mode-local) .hud { padding-top: calc(6px + env(safe-area-inset-top)); 
 }
 .tray::-webkit-scrollbar { display: none; }
 
-/* 端のピースも中央まで送れるようにする余白 */
+/* 端のピースも中央まで送れるようにする余白。
+   実際のタイル幅から view.js が測って入れる（計算値とずれると端まで送れなくなる）。 */
 .tray::before,
 .tray::after {
   content: "";
-  flex: 0 0 calc(50% - var(--tile) / 2);
+  flex: 0 0 var(--spacer, 0px);
 }
 
 .tile {
@@ -431,20 +429,20 @@ body:not(.mode-local) .hud { padding-top: calc(6px + env(safe-area-inset-top)); 
 .tile-grid { display: grid; gap: 1px; }
 .tile-grid i { width: 9px; height: 9px; border-radius: 2px; display: block; }
 
-/* 対面対戦では上下 2 つのパネルが入るので、ひとまわり小さくして盤面に場所を譲る */
-body.mode-local { --tile: 56px; }
-body.mode-local .tile-grid i { width: 7px; height: 7px; }
-body.mode-local .ctl { min-height: 38px; padding: 8px 13px; font-size: 12px; }
-body.mode-local .ctl-place { min-width: 104px; }
+/* 対面対戦は上下 2 つのパネルが入るぶん高さで頭打ちになる。
+   付属物をひとまわり小さくして、その差をまるごと盤面に回す。 */
+body.mode-local { --tile: 52px; }
+body.mode-local .tile-grid i { width: 6.5px; height: 6.5px; }
+body.mode-local .ctl-place { width: 58px; font-size: 13px; }
+body.mode-local .panel { gap: 5px; padding: 3px 0; }
+body.mode-local .status { min-height: 15px; font-size: 11px; }
+body.mode-local .score { padding: 3px 9px; }
 
-/* 縦の狭い端末ではさらに詰めて、盤面の大きさを優先する */
-@media (max-height: 720px) {
-  body.mode-local { --tile: 48px; }
-  body.mode-local .tile-grid i { width: 6px; height: 6px; }
-  body.mode-local .ctl { min-height: 34px; padding: 6px 11px; }
-  body.mode-local .hud { padding-top: 2px; }
-  body.mode-local .status { min-height: 16px; font-size: 11px; }
-  body.mode-local .panel { gap: 4px; padding: 4px 0; }
+/* 縦の狭い端末ではさらに詰める */
+@media (max-height: 700px) {
+  body.mode-local { --tile: 46px; }
+  body.mode-local .tile-grid i { width: 5.5px; height: 5.5px; }
+  body.mode-local .ctl-place { width: 54px; font-size: 12px; }
 }
 
 /* --------------------------------------------------------------------------
@@ -453,10 +451,10 @@ body.mode-local .ctl-place { min-width: 104px; }
    残るのは「いま言っていること」だけで、履歴はどこにも持たない。
    -------------------------------------------------------------------------- */
 .chat {
+  flex: none;
   display: flex;
   flex-direction: column;
   gap: 3px;
-  padding: 2px 2px 4px;
 }
 .chat[hidden] { display: none; }
 
@@ -464,11 +462,11 @@ body.mode-local .ctl-place { min-width: 104px; }
   display: flex;
   align-items: center;
   gap: 7px;
-  min-height: 30px;
+  min-height: 28px;
   padding: 0 10px;
-  border-radius: 9px;
+  border-radius: 8px;
   font-size: 13px;
-  line-height: 1.35;
+  line-height: 1.3;
 }
 .chat-line .chip { width: 8px; height: 8px; border-radius: 2px; }
 
@@ -497,7 +495,7 @@ body.mode-local .ctl-place { min-width: 104px; }
   color: var(--ink);
   font: inherit;
   font-size: 13px;
-  padding: 6px 0;
+  padding: 5px 0;
 }
 .chat-mine input:focus { outline: none; }
 .chat-mine input::placeholder { color: var(--mist); font-size: 12px; }

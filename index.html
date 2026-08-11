@@ -110,36 +110,30 @@
 
   <!-- 向こう側のプレイヤー（対面対戦のときだけ表示。180°回転して相手から正しく見える） -->
   <div class="panel panel-far" data-owner="far" hidden>
-    <div class="controls">
-      <button class="ctl ctl-ghost" data-act="flip" aria-label="反転">
-        <span class="ctl-icon">⇄</span><span class="ctl-label">反転</span>
-      </button>
+    <div class="panel-row">
+      <div class="panel-tools">
+        <button class="icon-btn js-quit" aria-label="対局をやめる">✕</button>
+        <button class="icon-btn js-undo" aria-label="待った" hidden>↶</button>
+      </div>
+      <div class="tray" role="listbox" aria-label="持ちピース"></div>
       <button class="ctl ctl-place" data-act="place">置く</button>
-      <button class="ctl ctl-ghost" data-act="rotate" aria-label="回転">
-        <span class="ctl-icon">↻</span><span class="ctl-label">回転</span>
-      </button>
     </div>
-    <div class="tray" role="listbox" aria-label="持ちピース"></div>
   </div>
 
   <!-- 盤面 -->
   <div class="board-area">
-    <header class="hud">
-      <button class="icon-btn" id="btn-quit" aria-label="対局をやめる">✕</button>
-      <div class="scores">
-        <div class="score" data-player="1">
-          <i class="chip chip-a"></i>
-          <span class="score-name">先手</span>
-          <span class="score-num">89</span>
-        </div>
-        <div class="score" data-player="2">
-          <i class="chip chip-b"></i>
-          <span class="score-name">後手</span>
-          <span class="score-num">89</span>
-        </div>
+    <!-- ひとこと（オンライン対戦のみ）。相手の名前のすぐ下に流れるよう頭に置く -->
+    <div class="chat" id="chat" hidden>
+      <p class="chat-line chat-them" id="chat-them" hidden>
+        <i class="chip" id="chat-them-chip"></i><span id="chat-them-text"></span>
+      </p>
+      <div class="chat-line chat-mine">
+        <i class="chip" id="chat-my-chip"></i>
+        <input id="chat-input" type="text" maxlength="140" autocomplete="off"
+               enterkeyhint="done" aria-label="ひとこと"
+               placeholder="ひとこと（打った文字がそのまま相手に見えます）">
       </div>
-      <button class="icon-btn" id="btn-undo" aria-label="待った" hidden>↶</button>
-    </header>
+    </div>
 
     <div class="board-frame">
       <div class="board" id="board" role="grid" aria-label="盤面"></div>
@@ -148,31 +142,16 @@
     <p class="status" id="status"></p>
   </div>
 
-  <!-- ひとこと（オンライン対戦のときだけ。打った文字がそのまま相手に見える） -->
-  <div class="chat" id="chat" hidden>
-    <p class="chat-line chat-them" id="chat-them" hidden>
-      <i class="chip" id="chat-them-chip"></i><span id="chat-them-text"></span>
-    </p>
-    <div class="chat-line chat-mine">
-      <i class="chip" id="chat-my-chip"></i>
-      <input id="chat-input" type="text" maxlength="140" autocomplete="off"
-             enterkeyhint="done" aria-label="ひとこと"
-             placeholder="ひとこと（打った文字がそのまま相手に見えます）">
-    </div>
-  </div>
-
   <!-- 手前のプレイヤー -->
   <div class="panel panel-near" data-owner="near">
-    <div class="controls">
-      <button class="ctl ctl-ghost" data-act="flip" aria-label="反転">
-        <span class="ctl-icon">⇄</span><span class="ctl-label">反転</span>
-      </button>
+    <div class="panel-row">
+      <div class="panel-tools">
+        <button class="icon-btn js-quit" aria-label="対局をやめる">✕</button>
+        <button class="icon-btn js-undo" aria-label="待った" hidden>↶</button>
+      </div>
+      <div class="tray" role="listbox" aria-label="持ちピース"></div>
       <button class="ctl ctl-place" data-act="place">置く</button>
-      <button class="ctl ctl-ghost" data-act="rotate" aria-label="回転">
-        <span class="ctl-icon">↻</span><span class="ctl-label">回転</span>
-      </button>
     </div>
-    <div class="tray" role="listbox" aria-label="持ちピース"></div>
   </div>
 </section>
 
