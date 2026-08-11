@@ -81,7 +81,9 @@ js/room.js          オンライン対戦の段取り
 js/app.js           対局の進行と画面のつなぎ
 
 api/room.js         オンライン対戦の部屋（Vercel Blob）
-test/rules.test.mjs ルールの検証
+test/rules.test.mjs        ルールの検証
+test/online-duo.test.mjs  オンライン 2 人戦の通し検証
+test/online-four.test.mjs オンライン 4 人戦の通し検証
 ```
 
 ## ひとこと（オンライン対戦のみ）
@@ -106,9 +108,15 @@ test/rules.test.mjs ルールの検証
 
 ```bash
 npm install
-npm test          # ルールの検証
-npx vercel dev    # ローカルで API ごと動かす
+npm test           # ルールの検証（2 人戦・4 人戦）
+npm run test:online # 動いているサーバに対する通し検証
+npx vercel dev     # ローカルで API ごと動かす
 ```
+
+`npm test` は通信を伴わないルールの検証で、盤・向き・合法手・終局・順位まで確かめます。
+`npm run test:online` は実際のサーバに本物のリクエストを投げ、部屋の作成から
+着手の権限、終局、後片付けまでを通します。既定では本番に向くので、
+別の環境を見るときは `BLOCKS_URL=http://localhost:3000 npm run test:online` のように指定します。
 
 初回だけ、Blob ストアの用意が必要です。
 

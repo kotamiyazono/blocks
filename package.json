@@ -3,10 +3,11 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "角でつなげて広げる2人用ブロック配置ゲーム。ひとり／対面／オンラインで遊べる。",
+  "description": "角でつなげて広げるブロック配置ゲーム。2人・4人、ひとり／対面／オンラインで遊べる。",
   "scripts": {
     "dev": "vercel dev",
-    "test": "node test/rules.test.mjs"
+    "test": "node test/rules.test.mjs",
+    "test:online": "node test/online-duo.test.mjs && node test/online-four.test.mjs"
   },
   "dependencies": {
     "@vercel/blob": "^2.0.0"
