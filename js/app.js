@@ -19,10 +19,17 @@ import {
   flippedOrientation,
   orientationIndexOf,
   anchorForCells,
-  remainingSquares,
   result,
 } from './rules.js';
 import { chooseMove } from './ai.js';
+import {
+  applyColors,
+  buildSwatches,
+  partnerFor,
+  firstAvailable,
+  isColor,
+  DEFAULT_FIRST,
+} from './palette.js';
 import {
   buildBoard,
   renderBoard,
@@ -61,10 +68,42 @@ const state = {
   placeable: null,     // { key, set } 置けるピースの一覧をキャッシュ
   busy: false,         // 送信中はボタンを止める
   online: null,        // { code, token, player, seq, watcher }
+  pendingJoin: null,   // 色を選んでもらっている最中の部屋コード
   quitArmed: false,
 };
 
 const STORAGE_KEY = 'blocks:room';
+const COLOR_KEY = 'blocks:color';        // ひとり・オンラインで使う自分の色
+const LOCAL_COLOR_KEY = 'blocks:colors'; // 対面での先手・後手の色
+
+const readStore = (key, fallback) => {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw === null ? fallback : JSON.parse(raw);
+  } catch {
+    return fallback;
+  }
+};
+const writeStore = (key, value) => {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* 保存できなくても続行できる */ }
+};
+
+/** 選んだ色の控え。次に遊ぶときはここから始まる。 */
+const choice = {
+  mine: (() => {
+    const saved = readStore(COLOR_KEY, null);
+    return isColor(saved) ? saved : DEFAULT_FIRST;
+  })(),
+  local: (() => {
+    const saved = readStore(LOCAL_COLOR_KEY, null) || {};
+    const first = isColor(saved[1]) ? saved[1] : DEFAULT_FIRST;
+    const second = isColor(saved[2]) && saved[2] !== first ? saved[2] : partnerFor(first);
+    return { 1: first, 2: second };
+  })(),
+};
+
+const rememberMyColor = (id) => { choice.mine = id; writeStore(COLOR_KEY, id); };
+const rememberLocalColors = () => writeStore(LOCAL_COLOR_KEY, choice.local);
 
 /* ========================================================================
    DOM
@@ -89,6 +128,9 @@ const el = {
   joiningNote: $('#joining-note'),
   joiningError: $('#joining-error'),
   joiningBack: $('#btn-joining-back'),
+  joiningColor: $('#joining-color'),
+  joiningDots: $('#joining-dots'),
+  joinStart: $('#btn-join-start'),
   waitingNote: $('#waiting-note'),
   rematch: $('#btn-rematch'),
   chat: $('#chat'),
@@ -676,6 +718,8 @@ for (const panel of [el.panelNear, el.panelFar]) {
 function beginGame(mode, options = {}) {
   clearTimeout(cpuTimer);
   state.mode = mode;
+  // 色は見た目だけの話なので、盤を組む前に当てておけば以降どこにも影響しない
+  applyColors(options.colors?.[1], options.colors?.[2]);
   state.game = options.game || createGame();
   state.myPlayer = options.myPlayer || 1;
   state.sel = null;
@@ -729,8 +773,48 @@ $('#side-picker').addEventListener('click', (event) => {
   }
 });
 
+/** 自分の色を選ぶ見本（ひとり・オンライン共通）。 */
+function renderMyColorPickers() {
+  for (const id of ['#solo-colors', '#online-colors']) {
+    const node = $(id);
+    if (!node) continue;
+    buildSwatches(node, {
+      selected: choice.mine,
+      onPick: (picked) => {
+        rememberMyColor(picked);
+        renderMyColorPickers();
+      },
+    });
+  }
+}
+
+/** 対面での先手・後手の色。同じ色を選んだら入れ替える。 */
+function renderLocalColorPickers() {
+  for (const player of [1, 2]) {
+    buildSwatches($(`#local-colors-${player}`), {
+      selected: choice.local[player],
+      onPick: (picked) => {
+        const other = player === 1 ? 2 : 1;
+        if (choice.local[other] === picked) choice.local[other] = choice.local[player];
+        choice.local[player] = picked;
+        rememberLocalColors();
+        renderLocalColorPickers();
+      },
+    });
+  }
+}
+
 $('#btn-solo-start').addEventListener('click', () => {
-  beginGame('solo', { myPlayer: soloSide });
+  // 自分が選んだ色を自分の側に、CPU にはそれと違う色を当てる
+  const cpuColor = partnerFor(choice.mine);
+  const colors = soloSide === 1
+    ? { 1: choice.mine, 2: cpuColor }
+    : { 1: cpuColor, 2: choice.mine };
+  beginGame('solo', { myPlayer: soloSide, colors });
+});
+
+$('#btn-local-start').addEventListener('click', () => {
+  beginGame('local', { colors: { ...choice.local } });
 });
 
 /* ========================================================================
@@ -798,7 +882,7 @@ function onRoomUpdate(data) {
   // 盤面がまだ組み立てられていない画面（相手待ち・参加中）にいる場合
   if (!$('#screen-game').classList.contains('is-active')) {
     if (data.status === 'waiting') return; // まだ相手が来ていない
-    beginGame('online', { game: data.game, myPlayer: state.online.player });
+    beginGame('online', { game: data.game, myPlayer: state.online.player, colors: data.colors });
     toast('相手が参加しました');
     return;
   }
@@ -810,7 +894,7 @@ function onRoomUpdate(data) {
 
   if (rematchStarted) {
     el.sheetResult.hidden = true;
-    beginGame('online', { game: data.game, myPlayer: state.online.player });
+    beginGame('online', { game: data.game, myPlayer: state.online.player, colors: data.colors });
     toast('もう一局はじまります');
     return;
   }
@@ -915,7 +999,7 @@ $('#btn-create-room').addEventListener('click', async () => {
   el.onlineError.textContent = '';
 
   try {
-    const data = await createRoom();
+    const data = await createRoom(choice.mine);
     state.online = {
       code: data.code,
       token: data.token,
@@ -926,6 +1010,7 @@ $('#btn-create-room').addEventListener('click', async () => {
     };
     state.myPlayer = data.player;
     saveRoom(state.online);
+    applyColors(data.colors?.[1], data.colors?.[2]); // 待ち画面の色も自分の選んだ色に
 
     el.inviteUrl.value = inviteUrlFor(data.code);
     showScreen('screen-waiting');
@@ -979,7 +1064,10 @@ async function enterByCode(code) {
   showScreen('screen-joining');
   el.joiningError.textContent = '';
   el.joiningBack.hidden = true;
-  el.joiningNote.textContent = '部屋に参加しています…';
+  el.joinStart.hidden = true;
+  el.joiningColor.hidden = true;
+  el.joiningDots.hidden = false;
+  el.joiningNote.textContent = '部屋を確かめています…';
 
   const saved = loadRoom();
 
@@ -987,25 +1075,64 @@ async function enterByCode(code) {
   if (saved && saved.code === code) {
     try {
       const data = await fetchRoom(code);
-      state.online = { ...saved, seq: -1, opponentJoined: Boolean(data.hasOpponent), watcher: null };
+      state.online = { ...saved, seq: data.seq, opponentJoined: Boolean(data.hasOpponent), watcher: null };
       state.myPlayer = saved.player;
 
       if (data.status === 'waiting') {
+        applyColors(data.colors?.[1], data.colors?.[2]);
         el.inviteUrl.value = inviteUrlFor(code);
         showScreen('screen-waiting');
-        state.online.seq = data.seq;
-        startWatcher();
       } else {
-        beginGame('online', { game: data.game, myPlayer: saved.player });
-        state.online.seq = data.seq;
-        startWatcher();
+        beginGame('online', { game: data.game, myPlayer: saved.player, colors: data.colors });
       }
+      startWatcher();
       return;
     } catch { /* 続きから入れなければ、新規参加として扱う */ }
   }
 
+  // 相手が使っている色を確かめてから、自分の色を選んでもらう
+  let hostColor = null;
   try {
-    const data = await joinRoom(code);
+    const room = await fetchRoom(code);
+    if (room.status !== 'waiting' || room.hasOpponent) {
+      throw Object.assign(new Error('この部屋はもう対戦がはじまっています'), { status: 409 });
+    }
+    hostColor = room.colors?.[1] || DEFAULT_FIRST;
+  } catch (error) {
+    el.joiningDots.hidden = true;
+    el.joiningNote.textContent = '';
+    el.joiningError.textContent = error.message;
+    el.joiningBack.hidden = false;
+    return;
+  }
+
+  // 相手の色と同じものを選んでいたら、空いている色にずらしておく
+  if (choice.mine === hostColor) rememberMyColor(firstAvailable(hostColor));
+
+  const paint = () => buildSwatches($('#join-colors'), {
+    selected: choice.mine,
+    taken: hostColor,
+    onPick: (picked) => { rememberMyColor(picked); paint(); },
+  });
+  paint();
+
+  el.joiningDots.hidden = true;
+  el.joiningNote.textContent = '相手が待っています。色を選んではじめてください。';
+  el.joiningColor.hidden = false;
+  el.joinStart.hidden = false;
+  el.joinStart.disabled = false;
+  state.pendingJoin = code;
+}
+
+$('#btn-join-start').addEventListener('click', async () => {
+  const code = state.pendingJoin;
+  if (!code) return;
+
+  el.joinStart.disabled = true;
+  el.joiningError.textContent = '';
+
+  try {
+    const data = await joinRoom(code, choice.mine);
     state.online = {
       code: data.code,
       token: data.token,
@@ -1015,16 +1142,21 @@ async function enterByCode(code) {
       watcher: null,
     };
     state.myPlayer = data.player;
+    state.pendingJoin = null;
     saveRoom(state.online);
 
-    beginGame('online', { game: data.game, myPlayer: data.player });
+    beginGame('online', { game: data.game, myPlayer: data.player, colors: data.colors });
     startWatcher();
   } catch (error) {
-    el.joiningNote.textContent = '';
     el.joiningError.textContent = error.message;
-    el.joiningBack.hidden = false;
+    el.joinStart.disabled = false;
+    if (error.status === 409 || error.status === 404) {
+      el.joinStart.hidden = true;
+      el.joiningColor.hidden = true;
+      el.joiningBack.hidden = false;
+    }
   }
-}
+});
 
 /* ========================================================================
    結果
@@ -1072,7 +1204,7 @@ el.rematch.addEventListener('click', async () => {
     try {
       const data = await requestRematch(state.online.code, state.online.token);
       state.online.seq = data.seq;
-      beginGame('online', { game: data.game, myPlayer: state.online.player });
+      beginGame('online', { game: data.game, myPlayer: state.online.player, colors: data.colors });
       startWatcher();
       toast('相手にも新しい盤面が届きます');
     } catch (error) {
@@ -1110,9 +1242,9 @@ async function goHome() {
 for (const button of $$('[data-mode]')) {
   button.addEventListener('click', () => {
     const mode = button.dataset.mode;
-    if (mode === 'solo') showScreen('screen-solo');
-    else if (mode === 'local') beginGame('local');
-    else showScreen('screen-online');
+    if (mode === 'solo') { renderMyColorPickers(); showScreen('screen-solo'); }
+    else if (mode === 'local') { renderLocalColorPickers(); showScreen('screen-local'); }
+    else { renderMyColorPickers(); showScreen('screen-online'); }
   });
 }
 
@@ -1148,6 +1280,9 @@ for (const button of el.quit) {
    ======================================================================== */
 
 function boot() {
+  // ホームの印も前回選んだ色で出す
+  applyColors(choice.mine, partnerFor(choice.mine));
+
   const code = location.hash.replace('#', '').trim().toUpperCase();
   if (/^[A-Z0-9]{4}$/.test(code)) {
     enterByCode(code);

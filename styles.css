@@ -142,6 +142,22 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
 
 .error { color: rgb(var(--bad)); font-size: 13px; min-height: 20px; text-align: center; }
 
+/* 色見本 */
+.swatches { display: flex; gap: 10px; justify-content: space-between; }
+.swatch {
+  flex: 1;
+  aspect-ratio: 1;
+  max-width: 46px;
+  border-radius: 12px;
+  background: linear-gradient(158deg, rgb(var(--sw-hi)), rgb(var(--sw)) 58%, rgb(var(--sw-dp)));
+  box-shadow: inset 0 1px 1px rgb(255 255 255 / .5);
+  transition: transform .1s ease, opacity .12s ease;
+}
+.swatch:active { transform: scale(.92); }
+/* 選んでいる色は、地の色をひと回し挟んでから輪郭を出す */
+.swatch.is-on { box-shadow: inset 0 1px 1px rgb(255 255 255 / .5), 0 0 0 3px var(--bg), 0 0 0 5px var(--ink); }
+.swatch:disabled { opacity: .18; cursor: default; }
+
 /* --------------------------------------------------------------------------
    ホーム
    -------------------------------------------------------------------------- */
@@ -607,8 +623,17 @@ body.mode-local .score { padding: 3px 9px; }
 /* --------------------------------------------------------------------------
    広い画面：盤面を大きくしすぎず中央に置く
    -------------------------------------------------------------------------- */
-@media (min-width: 720px) and (min-height: 640px) {
-  .screen-game { max-width: 620px; width: 100%; margin: 0 auto; }
+/* タブレットや PC。盤は正方形なので、横に広い画面では結局高さで頭打ちになる。
+   その頭打ちの値に合わせて全体の幅を決めると、持ちピースの帯も盤とだいたい揃う。
+   縦長の端末では 100% のままなので、iPad の縦持ちでも画面幅いっぱいに使える。 */
+@media (min-width: 700px) {
+  .screen-game { width: 100%; max-width: min(100%, 96vh); margin: 0 auto; }
+  :root { --tile: 76px; }
+  .tile-grid i { width: 11px; height: 11px; }
+  .ctl-place { width: 84px; font-size: 16px; }
+  .status { font-size: 14px; }
+  .chat-line { min-height: 34px; font-size: 15px; }
+  .chat-mine input { font-size: 15px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -50,13 +50,41 @@
     <div class="field">
       <span class="field-label">手番</span>
       <div class="segmented" id="side-picker" role="radiogroup" aria-label="手番">
-        <button role="radio" data-side="1" aria-checked="true" class="is-on">先手（むらさき）</button>
-        <button role="radio" data-side="2">後手（オレンジ）</button>
+        <button role="radio" data-side="1" aria-checked="true" class="is-on">先手</button>
+        <button role="radio" data-side="2">後手</button>
       </div>
+    </div>
+
+    <div class="field">
+      <span class="field-label">あなたの色</span>
+      <div class="swatches" id="solo-colors" role="group" aria-label="あなたの色"></div>
     </div>
 
     <div class="setup-actions">
       <button class="btn btn-primary" id="btn-solo-start">はじめる</button>
+      <button class="link-btn" data-back>もどる</button>
+    </div>
+  </div>
+</section>
+
+<!-- ========== 対面: 設定 ========== -->
+<section class="screen" id="screen-local">
+  <div class="setup-inner">
+    <h2 class="setup-title">対面で遊ぶ</h2>
+    <p class="setup-note">端末を机に置いて、向かい合わせに座ってください。<br>それぞれの手元に自分のピースが並びます。</p>
+
+    <div class="field">
+      <span class="field-label">先手の色</span>
+      <div class="swatches" id="local-colors-1" role="group" aria-label="先手の色"></div>
+    </div>
+
+    <div class="field">
+      <span class="field-label">後手の色</span>
+      <div class="swatches" id="local-colors-2" role="group" aria-label="後手の色"></div>
+    </div>
+
+    <div class="setup-actions">
+      <button class="btn btn-primary" id="btn-local-start">はじめる</button>
       <button class="link-btn" data-back>もどる</button>
     </div>
   </div>
@@ -67,6 +95,11 @@
   <div class="setup-inner">
     <h2 class="setup-title">オンラインで遊ぶ</h2>
     <p class="setup-note">部屋を作ると招待URLができます。相手に送って、開いてもらうだけで対戦がはじまります。</p>
+
+    <div class="field">
+      <span class="field-label">あなたの色</span>
+      <div class="swatches" id="online-colors" role="group" aria-label="あなたの色"></div>
+    </div>
 
     <div class="setup-actions">
       <button class="btn btn-primary" id="btn-create-room">部屋を作る</button>
@@ -98,10 +131,19 @@
 <!-- ========== オンライン: 参加中 ========== -->
 <section class="screen" id="screen-joining">
   <div class="setup-inner">
-    <div class="waiting-dots" aria-hidden="true"><i></i><i></i><i></i></div>
-    <p class="setup-note" id="joining-note">部屋に参加しています…</p>
-    <p class="error" id="joining-error" role="alert"></p>
-    <button class="link-btn" data-back hidden id="btn-joining-back">ホームへ</button>
+    <div class="waiting-dots" id="joining-dots" aria-hidden="true"><i></i><i></i><i></i></div>
+    <p class="setup-note" id="joining-note">部屋を確かめています…</p>
+
+    <div class="field" id="joining-color" hidden>
+      <span class="field-label">あなたの色</span>
+      <div class="swatches" id="join-colors" role="group" aria-label="あなたの色"></div>
+    </div>
+
+    <div class="setup-actions">
+      <button class="btn btn-primary" id="btn-join-start" hidden>はじめる</button>
+      <p class="error" id="joining-error" role="alert"></p>
+      <button class="link-btn" data-back hidden id="btn-joining-back">ホームへ</button>
+    </div>
   </div>
 </section>
 
@@ -122,24 +164,24 @@
 
   <!-- 盤面 -->
   <div class="board-area">
-    <!-- ひとこと（オンライン対戦のみ）。相手の名前のすぐ下に流れるよう頭に置く -->
-    <div class="chat" id="chat" hidden>
-      <p class="chat-line chat-them" id="chat-them" hidden>
-        <i class="chip" id="chat-them-chip"></i><span id="chat-them-text"></span>
-      </p>
-      <div class="chat-line chat-mine">
-        <i class="chip" id="chat-my-chip"></i>
-        <input id="chat-input" type="text" maxlength="140" autocomplete="off"
-               enterkeyhint="done" aria-label="ひとこと"
-               placeholder="ひとこと（打った文字がそのまま相手に見えます）">
-      </div>
-    </div>
-
     <div class="board-frame">
       <div class="board" id="board" role="grid" aria-label="盤面"></div>
     </div>
 
     <p class="status" id="status"></p>
+  </div>
+
+  <!-- ひとこと（オンライン対戦のみ）。自分で打つものなので手元に置く -->
+  <div class="chat" id="chat" hidden>
+    <p class="chat-line chat-them" id="chat-them" hidden>
+      <i class="chip" id="chat-them-chip"></i><span id="chat-them-text"></span>
+    </p>
+    <div class="chat-line chat-mine">
+      <i class="chip" id="chat-my-chip"></i>
+      <input id="chat-input" type="text" maxlength="140" autocomplete="off"
+             enterkeyhint="done" aria-label="ひとこと"
+             placeholder="ひとこと（打った文字がそのまま相手に見えます）">
+    </div>
   </div>
 
   <!-- 手前のプレイヤー -->

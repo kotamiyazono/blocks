@@ -19,6 +19,7 @@ import {
   isFirstMove,
   matchesPiece,
 } from '../js/rules.js';
+import { isColor, partnerFor, firstAvailable, DEFAULT_FIRST } from '../js/palette.js';
 
 /** 見間違えやすい文字（O/0, I/1 など）を外した部屋コード用の英数字。 */
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -92,6 +93,7 @@ function publicView(room, seq) {
     hasOpponent: Boolean(room.tokens[1] && room.tokens[2]),
     game: room.game,
     chat: room.chat || { 1: '', 2: '' },
+    colors: room.colors || { 1: DEFAULT_FIRST, 2: partnerFor(DEFAULT_FIRST) },
   };
 }
 
@@ -130,7 +132,7 @@ export default async function handler(req, res) {
     const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
 
     switch (action) {
-      case 'create': return await handleCreate(res);
+      case 'create':  return await handleCreate(res, body);
       case 'join':   return await handleJoin(res, body);
       case 'poll':   return await handlePoll(res, req.query);
       case 'move':    return await handleMove(res, body);
@@ -149,7 +151,7 @@ export default async function handler(req, res) {
   }
 }
 
-async function handleCreate(res) {
+async function handleCreate(res, body) {
   // 万一コードがぶつかったら引き直す
   let code = null;
   for (let attempt = 0; attempt < 6; attempt++) {
@@ -162,6 +164,7 @@ async function handleCreate(res) {
   if (!code) return fail(res, 503, '部屋を作れませんでした。もう一度お試しください');
 
   const token = newToken();
+  const hostColor = isColor(body.color) ? body.color : DEFAULT_FIRST;
   const room = {
     code,
     seq: 0,
@@ -171,6 +174,8 @@ async function handleCreate(res) {
     tokens: { 1: token, 2: null },
     game: createGame(),
     chat: { 1: '', 2: '' },
+    // 参加者が決まるまでは仮の色を入れておき、入ってきたら本人の選んだ色にする
+    colors: { 1: hostColor, 2: partnerFor(hostColor) },
   };
 
   await writeRoom(room, undefined);
@@ -192,6 +197,11 @@ async function handleJoin(res, body) {
   const token = newToken();
   room.tokens[2] = token;
   room.status = 'playing';
+
+  // 参加者の色。相手と同じ色は取れないので、その場合は空いている色にずらす
+  if (!room.colors) room.colors = { 1: DEFAULT_FIRST, 2: partnerFor(DEFAULT_FIRST) };
+  const wanted = isColor(body.color) ? body.color : partnerFor(room.colors[1]);
+  room.colors[2] = wanted === room.colors[1] ? firstAvailable(room.colors[1]) : wanted;
 
   await writeRoom(room, etag);
   return send(res, 200, { code, token, player: 2, ...publicView(room) });

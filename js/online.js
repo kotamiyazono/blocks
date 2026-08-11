@@ -40,8 +40,8 @@ const post = (action, body) =>
     body: JSON.stringify(body || {}),
   });
 
-export const createRoom = () => post('create');
-export const joinRoom = (code) => post('join', { code });
+export const createRoom = (color) => post('create', { color });
+export const joinRoom = (code, color) => post('join', { code, color });
 export const sendMove = (code, token, pieceId, cells) => post('move', { code, token, pieceId, cells });
 export const leaveRoom = (code, token) => post('leave', { code, token });
 export const requestRematch = (code, token) => post('rematch', { code, token });
