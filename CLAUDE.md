@@ -39,6 +39,15 @@
 フロー: 設計 → 実装+テスト → レビュー → 指摘があればCodexに差し戻し → 完了報告。
 オーケストレーターは受け渡し・判断・報告のみ行う。軽微なtypo修正等でもこの分業を崩さない。
 
+## 公開
+
+公開は `main` への push による自動デプロイを基本とする(Cloudflare Workers Builds)。
+ビルド工程は無いので、走るのは `npx wrangler deploy` だけ。
+
+- 手元から `wrangler deploy` を直接打つのは、GitHub 連携が壊れているときの例外手段
+- 本番は https://blocks.superblue.app
+- 用意する環境変数・secret は 1 つも無い
+
 ## テスト
 
 ```bash
