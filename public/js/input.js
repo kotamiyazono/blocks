@@ -108,6 +108,10 @@ function attachRotateGestures(root, { find, accept }) {
 
   root.addEventListener('pointerdown', (event) => {
     if (!canAct()) return;
+    if (press) {
+      clearTimeout(press.timer);
+      press = null;
+    }
     const hit = find(event);
     if (!hit || !accept(hit)) return;
 
@@ -127,6 +131,11 @@ function attachRotateGestures(root, { find, accept }) {
 
   root.addEventListener('pointermove', (event) => {
     if (!press || event.pointerId !== press.id || press.moved) return;
+    if (!canAct() || !state.sel) {
+      clearTimeout(press.timer);
+      press = null;
+      return;
+    }
     if (Math.hypot(event.clientX - press.x, event.clientY - press.y) < DRAG_SLOP) return;
     press.moved = true;
     clearTimeout(press.timer);
@@ -142,6 +151,7 @@ function attachRotateGestures(root, { find, accept }) {
 
   root.addEventListener('pointerup', finish);
   root.addEventListener('pointercancel', finish);
+  root.addEventListener('lostpointercapture', finish);
 }
 
 /* ==========================================================================
@@ -219,9 +229,17 @@ function setupTrackpads() {
 function setupTrackpad(pad) {
   let drag = null;
 
+  attachRotateGestures(pad, {
+    find: () => pad,
+    accept: () => Boolean(state.sel),
+  });
+
   pad.addEventListener('pointerdown', (event) => {
     if (!canAct() || !state.sel) return;
-    if (drag || !state.sel.anchor) return;
+    if (drag) {
+      drag = null;
+      pad.classList.remove('is-active');
+    }
     event.preventDefault();
     try { pad.setPointerCapture(event.pointerId); } catch { /* 続行してよい */ }
     drag = {
@@ -238,7 +256,7 @@ function setupTrackpad(pad) {
 
   pad.addEventListener('pointermove', (event) => {
     if (!drag || event.pointerId !== drag.id) return;
-    if (!canAct() || !state.sel || !state.sel.anchor) {
+    if (!canAct() || !state.sel) {
       drag = null;
       pad.classList.remove('is-active');
       return;
@@ -247,6 +265,7 @@ function setupTrackpad(pad) {
     drag.ay += event.clientY - drag.y;
     drag.x = event.clientX;
     drag.y = event.clientY;
+    if (!state.sel.anchor) return;
     const dc = Math.trunc(drag.ax / drag.step);
     const dr = Math.trunc(drag.ay / drag.step);
     if (!dr && !dc) return;

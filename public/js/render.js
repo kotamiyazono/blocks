@@ -158,7 +158,7 @@ function renderStatus() {
       ? '自分の色の印を覆うように盤をタップ'
       : '盤をタップして置く場所を決めます';
   } else {
-    hint = '帯で微調整・駒をタップで回転・長押しで反転';
+    hint = '帯で動かす・駒か帯をタップで回転・長押しで反転';
   }
   statusLine.innerHTML = `${who} ・ ${hint}`;
 }

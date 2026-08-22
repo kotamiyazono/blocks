@@ -28,7 +28,7 @@
   --far-min: 4px;
   --near-safe-pad: 8px;
   --far-safe-pad: 4px;
-  --trackpad-h: 34px;
+  --trackpad-min: 34px;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -233,7 +233,7 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
 .screen-game { gap: 2px; padding: 0 4px; overflow: hidden; }
 
 .board-area {
-  flex: 1;
+  flex: 0 1 auto;
   min-height: 0;
   display: flex;
   flex-direction: column;
@@ -243,13 +243,18 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
 /* 残りマスの数字は置いていない。手元のカルーセルに残っているピースそのものが
    そのまま「残り」を表しているので、数で言い直す必要がない。
    手番も、明るいほうのパネルと下の一文で分かる。 */
+/* 盤とひとことは画面の高さに応じて上下し、対面では盤を中央に置く。 */
 .board-area { padding-top: calc(2px + env(safe-area-inset-top)); }
+.board-area::before { content: ''; flex: 0 100 12px; min-height: 0; }
 body.mode-local .board-area { padding-top: 0; }
+body.mode-local .board-area::before { display: none; }
 
 /* 盤面は縦横のうち狭いほうに合わせて正方形にする */
 .board-frame {
-  flex: 1;
+  flex: 0 1 auto;
   min-height: 0;
+  width: 100%;
+  aspect-ratio: 1;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -324,9 +329,9 @@ body.mode-local .board-area { padding-top: 0; }
 /* 持ちピースと「置く」を 1 行にまとめて、その分を丸ごと盤面に回している。
    回転と反転はボタンを置かず、駒へのタップと長押しで行う。 */
 .panel {
-  /* 盤面は残りを埋めるので、パネル側は自分の高さを譲らないようにする。
-     ここが縮むと持ちピースが画面の外に押し出されてしまう。 */
-  flex: none;
+  /* ここが縮むと持ちピースが画面の外に押し出されてしまう。
+     縮まないまま、余った高さは帯へ流して伸びる。 */
+  flex: 1 0 auto;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -370,26 +375,25 @@ body.mode-local .board-area { padding-top: 0; }
 }
 .panel.is-idle { opacity: .3; pointer-events: none; }
 
-/* 盤の上の駒を、指で駒を隠さずに動かすための帯。 */
+/* 盤の上の駒を、指で駒を隠さずに動かすための帯。
+   余っている縦のスペースはすべてここに流れてくる（.panel の flex-grow 経由）。 */
 .trackpad {
-  flex: none;
-  height: var(--trackpad-h);
-  border-radius: 10px;
+  flex: 1 0 var(--trackpad-min);
+  border-radius: 12px;
   border: 1px solid var(--line);
-  color: var(--mist);
-  background-color: var(--surface);
-  background-image: radial-gradient(circle, currentColor 1px, transparent 1.2px);
-  background-size: 7px 7px;
+  color: var(--line);
+  background-color: var(--surface-2);
+  background-image: radial-gradient(circle, currentColor .9px, transparent 1.1px);
+  background-size: 9px 9px;
   touch-action: none;
   user-select: none;
-  opacity: .45;
-  transition: opacity .15s ease, background-color .15s ease, border-color .15s ease, color .15s ease;
+  transition: color .15s ease, background-color .15s ease, border-color .15s ease;
 }
-.panel.has-ghost .trackpad { opacity: 1; }
-.trackpad.is-active {
-  color: var(--surface);
-  background-color: var(--ink);
-  border-color: var(--ink);
+.panel.has-ghost .trackpad { color: var(--mist); }
+.panel .trackpad.is-active {
+  color: var(--bg);
+  background-color: var(--mist);
+  border-color: var(--mist);
 }
 
 .ctl {
@@ -471,7 +475,7 @@ body.mode-local .board-area { padding-top: 0; }
 
 /* 対面対戦は上下 2 つのパネルが入るぶん高さで頭打ちになる。
    付属物をひとまわり小さくして、その差をまるごと盤面に回す。 */
-body.mode-local { --tile: 52px; --panel-pad: 3px; --trackpad-h: 26px; }
+body.mode-local { --tile: 52px; --panel-pad: 3px; --trackpad-min: 26px; }
 body.mode-local .tile-grid i { width: 6.5px; height: 6.5px; }
 body.mode-local .ctl-place { width: 58px; font-size: 13px; }
 body.mode-local .status { min-height: 15px; font-size: 11px; }
@@ -479,7 +483,7 @@ body.mode-local .score { padding: 3px 9px; }
 
 /* 縦の狭い端末ではさらに詰める */
 @media (max-height: 700px) {
-  body.mode-local { --tile: 46px; --trackpad-h: 22px; }
+  body.mode-local { --tile: 46px; --trackpad-min: 22px; }
   body.mode-local .tile-grid i { width: 5.5px; height: 5.5px; }
   body.mode-local .ctl-place { width: 54px; font-size: 12px; }
 }
@@ -653,7 +657,7 @@ body.mode-local .score { padding: 3px 9px; }
    縦長の端末では 100% のままなので、iPad の縦持ちでも画面幅いっぱいに使える。 */
 @media (min-width: 700px) {
   .screen-game { width: 100%; max-width: min(100%, 96vh); margin: 0 auto; }
-  :root { --tile: 76px; --trackpad-h: 44px; }
+  :root { --tile: 76px; --trackpad-min: 44px; }
   .tile-grid i { width: 11px; height: 11px; }
   .ctl-place { width: 84px; font-size: 16px; }
   .status { font-size: 14px; }
