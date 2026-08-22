@@ -47,21 +47,33 @@ async function callRoom(env, code, action, body) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-    if (url.pathname !== '/api/room') return new Response('Not found', { status: 404 });
-
-    let body = {};
-    if (request.method === 'POST') {
-      try {
-        body = await request.json();
-        if (!body || typeof body !== 'object' || Array.isArray(body)) throw new Error();
-      } catch {
+    if (url.pathname === '/api/socket') {
+      if (request.method !== 'GET'
+        || request.headers.get('Upgrade')?.toLowerCase() !== 'websocket') {
         return json({ error: '不正なリクエストです' }, 400);
       }
-    } else if (request.method !== 'GET') {
+      try {
+        const code = requireCode(url.searchParams.get('code'));
+        return await env.ROOM.getByName(code).fetch(request);
+      } catch (error) {
+        if (error instanceof RequestError) return json({ error: error.message }, error.status);
+        console.error('[room]', error);
+        return json({ error: 'サーバ側で問題が起きました' }, 500);
+      }
+    }
+    if (url.pathname !== '/api/room' || request.method !== 'POST') {
+      return new Response('Not found', { status: 404 });
+    }
+
+    let body = {};
+    try {
+      body = await request.json();
+      if (!body || typeof body !== 'object' || Array.isArray(body)) throw new Error();
+    } catch {
       return json({ error: '不正なリクエストです' }, 400);
     }
 
-    const action = request.method === 'GET' ? 'poll' : String(url.searchParams.get('action') || '');
+    const action = String(url.searchParams.get('action') || '');
     try {
       if (action === 'create') {
         for (let attempt = 0; attempt < 6; attempt++) {
@@ -72,12 +84,9 @@ export default {
         return json({ error: '部屋を作れませんでした。もう一度お試しください' }, 503);
       }
 
-      const code = requireCode(request.method === 'GET'
-        ? url.searchParams.get('code')
-        : body.code);
-      return await callRoom(env, code, action, request.method === 'GET'
-        ? { since: url.searchParams.get('since') ?? undefined }
-        : body);
+      const code = requireCode(body.code);
+      if (action !== 'join') return json({ error: '不正なリクエストです' }, 400);
+      return await callRoom(env, code, action, body);
     } catch (error) {
       if (error instanceof RequestError) {
         return json({ error: error.message }, error.status);

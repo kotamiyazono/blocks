@@ -29,7 +29,7 @@ export const state = {
   history: [],         // 待った用（ひとり／対面のみ）
   placeable: null,     // { key, set } 置けるピースの一覧をキャッシュ
   busy: false,         // 送信中はボタンを止める
-  online: null,        // { code, token, player, seq, opponentJoined, watcher }
+  online: null,        // { code, token, player, opponentJoined, socket }
   quitArmed: false,    // 「やめる」の二度押し待ち
 };
 

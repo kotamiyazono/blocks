@@ -33,7 +33,7 @@ import {
   prepareChat,
   rematchOnline,
   closeRoom,
-  stopWatcher,
+  disconnect,
   runCpuSeatIfHost,
 } from './room.js';
 
@@ -169,7 +169,7 @@ function undo() {
 const hideResult = () => { sheetResult.hidden = true; };
 
 function showResult() {
-  // オンラインでは相手が「もう一局」を選んだのを受け取りたいので、見に行くのは止めない
+  // オンラインでは相手が「もう一局」を選んだ通知を受け取るため、接続を保つ
   const scores = result(state.game);
 
   // 残りマスの少ない順に並べる。人数が変わるので毎回組み立て直す
@@ -228,7 +228,7 @@ rematchButton.addEventListener('click', async () => {
 
   rematchButton.disabled = true;
   try {
-    await rematchOnline();
+    rematchOnline();
     toast('相手にも新しい盤面が届きます');
   } catch (error) {
     toast(error.message);
@@ -239,9 +239,9 @@ rematchButton.addEventListener('click', async () => {
 
 async function goHome() {
   clearTimeout(cpuTimer);
-  stopWatcher();
 
-  if (state.mode === 'online' && state.online) await closeRoom();
+  if (state.online) await closeRoom();
+  else disconnect();
 
   state.game = null;
   state.mode = null;
