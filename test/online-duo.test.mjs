@@ -5,11 +5,11 @@
  * ルールの検証（rules.test.mjs）と違い、部屋の作成・参加・着手の権限・終局まで、
  * 通信をまたいだ振る舞いを確かめるためのもの。
  */
-import { VARIANTS, legalMoves, isFirstMove } from '../js/rules.js';
+import { VARIANTS, legalMoves, isFirstMove } from '../public/js/rules.js';
 const V = VARIANTS.duo;
 
 // 既定は本番。別の環境に向けるときは BLOCKS_URL を指定する
-const BASE = process.env.BLOCKS_URL || 'https://blocks-olive.vercel.app';
+const BASE = process.env.BLOCKS_URL || 'https://blocks.kotamiyazono.workers.dev';
 let failures = 0;
 const check = (name, cond, extra = '') => {
   console.log(cond ? `  ok   ${name}` : `  FAIL ${name} ${extra}`);
@@ -88,6 +88,22 @@ check('正しい着手は通る', ok.status === 200 && ok.data.game.turn === 2, 
 check('着手で seq が進む', ok.data.seq > joined.data.seq);
 check('着手で手札が減る', ok.data.game.hands[1].length === 20);
 check('盤面に反映される', firstMove.cells.every(([r,c]) => ok.data.game.board[r*14+c] === 1));
+
+console.log('\n== 同時着手 ==');
+const raceCreated = await post('create');
+const raceCode = raceCreated.data.code;
+const raceJoined = await post('join', { code: raceCode });
+const beforeRace = raceJoined;
+const moveBody = { code: raceCode, token: raceCreated.data.token, pieceId: firstMove.pieceId, cells: firstMove.cells };
+const [raceA, raceB] = await Promise.all([post('move', moveBody), post('move', moveBody)]);
+const statuses = [raceA.status, raceB.status].sort((a, b) => a - b);
+check('同じ手を同時に送ると 200 は 1 本、敗者は 409', statuses[0] === 200 && statuses[1] === 409 && [raceA, raceB].some(r => r.data?.error === 'あなたの手番ではありません'), JSON.stringify(statuses));
+const afterRace = await get(raceCode, 0);
+check('同時着手で seq は 1 だけ進み手番が進む', afterRace.data.seq === beforeRace.data.seq + 1 && afterRace.data.game.turn === 2);
+const beforeCount = beforeRace.data.game.board.filter((v) => v === 1).length;
+const afterCount = afterRace.data.game.board.filter((v) => v === 1).length;
+check('同時着手でピースのマスが重複しない', afterCount - beforeCount === firstMove.cells.length);
+await post('leave', { code: raceCode, token: raceCreated.data.token });
 
 console.log('\n== 対局を最後まで進める ==');
 game = ok.data.game;

@@ -3,8 +3,8 @@ import {
   createGame, canPlace, legalMoves, hasLegalMove, applyMove,
   remainingSquares, result, isFirstMove, cellsAtAnchor, flippedOrientation,
   matchesPiece, orientationIndexOf, anchorForCells, variantOf,
-} from '../js/rules.js';
-import { chooseMove } from '../js/ai.js';
+} from '../public/js/rules.js';
+import { chooseMove } from '../public/js/ai.js';
 
 let failures = 0;
 const check = (name, cond, extra = '') => {

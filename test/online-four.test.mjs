@@ -5,10 +5,10 @@
  * ルールの検証（rules.test.mjs）と違い、部屋の作成・参加・着手の権限・終局まで、
  * 通信をまたいだ振る舞いを確かめるためのもの。
  */
-import { VARIANTS, legalMoves, isFirstMove } from '../js/rules.js';
+import { VARIANTS, legalMoves, isFirstMove } from '../public/js/rules.js';
 
 // 既定は本番。別の環境に向けるときは BLOCKS_URL を指定する
-const BASE = process.env.BLOCKS_URL || 'https://blocks-olive.vercel.app';
+const BASE = process.env.BLOCKS_URL || 'https://blocks.kotamiyazono.workers.dev';
 let failures = 0;
 const check = (name, cond, extra = '') => {
   console.log(cond ? `  ok   ${name}` : `  FAIL ${name} ${extra}`);

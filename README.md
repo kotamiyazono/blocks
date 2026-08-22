@@ -14,17 +14,17 @@
 | --- | --- |
 | **ひとりで遊ぶ** | CPU と対戦。2 人戦（先手・後手を選択）と 4 人戦（自分＋CPU3 人）。強さは「やさしい / ふつう / つよい」の 3 段階 |
 | **対面で遊ぶ** | 端末を机に置き、向かい合わせに座って 2 人で。実物と同じく盤は回さず、各自の手元に自分のピースが並びます |
+| **オンラインで遊ぶ** | 部屋を作って招待 URL を送るだけ。**受け取った人は開いた瞬間に席につきます。**2 人戦と 4 人戦を選べます。打った文字がそのまま相手に見える簡易チャット付き |
 
 色は席で決まります（先手から むらさき／オレンジ／ブルー／グリーン）。
 選ばせると手数が増えるだけなので、選択の余地は置いていません。
-| **オンラインで遊ぶ** | 部屋を作って招待 URL を送るだけ。**受け取った人は開いた瞬間に席につきます。**2 人戦と 4 人戦を選べます。打った文字がそのまま相手に見える簡易チャット付き |
 
 ### 4 人戦で人が揃わないとき
 
 部屋を作った人が「空いた席を CPU にして始める」を押すと、その時点で空いている席を
 CPU が引き受けます。2 人しか集まらなくても 4 人戦が遊べます。
 
-サーバには常時動く仕組みが無いので、**CPU の思考は部屋を作った人の端末が回しています。**
+サーバ側で CPU に考えさせることもできますが、今は**CPU の思考を部屋を作った人の端末が回しています。**
 サーバはその代打ちを部屋を作った人にだけ許しており、他の参加者が CPU 席を動かすことはできません。
 裏を返すと、部屋を作った人が離脱すると CPU も止まります。
 
@@ -60,27 +60,30 @@ PC では矢印キーで移動、`R` 回転、`F` 反転、`Enter` 決定、`Z` 
 
 ## 技術的な構成
 
-ビルド不要の素の ES モジュールと、Vercel Functions だけで動きます。
+ビルド不要の素の ES モジュールと、Cloudflare Workers（静的配信）・Durable Objects（部屋）だけで動きます。
 
 ```
-index.html          画面
-styles.css          見た目
-manifest.json       ホーム画面に置いたときの設定
+public/index.html          画面
+public/styles.css          見た目
+public/manifest.json       ホーム画面に置いたときの設定
 
-js/rules.js         ルール（盤の広さと開始点も含む。ブラウザとサーバが同じものを読む）
-js/ai.js            CPU の思考
-js/palette.js       席の色の呼び名（実際の色はスタイル側）
-js/session.js       今の対局の状態と、そこから導けること（DOM に触らない）
-js/ui.js            要素の取り出し・画面の出し分け・短い知らせ
-js/view.js          盤と持ちピースの DOM
-js/render.js        状態を画面に映す
-js/moves.js         駒の選択と向きの変更
-js/input.js         指とキーボード
-js/online.js        通信とポーリング
-js/room.js          オンライン対戦の段取り
-js/app.js           対局の進行と画面のつなぎ
+public/js/rules.js         ルール（盤の広さと開始点も含む。ブラウザとサーバが同じものを読む）
+public/js/ai.js            CPU の思考
+public/js/palette.js       席の色の呼び名（実際の色はスタイル側）
+public/js/session.js       今の対局の状態と、そこから導けること（DOM に触らない）
+public/js/ui.js            要素の取り出し・画面の出し分け・短い知らせ
+public/js/view.js          盤と持ちピースの DOM
+public/js/render.js        状態を画面に映す
+public/js/moves.js         駒の選択と向きの変更
+public/js/input.js         指とキーボード
+public/js/online.js        通信とポーリング
+public/js/room.js          オンライン対戦の段取り
+public/js/app.js           対局の進行と画面のつなぎ
 
-api/room.js         オンライン対戦の部屋（Vercel Blob）
+worker/index.js      API の受け口と部屋コードの割り当て
+worker/room.js       オンライン対戦の部屋（Durable Object）
+wrangler.toml        Worker と Durable Object の設定
+public/_headers      静的ファイルのキャッシュ設定
 test/rules.test.mjs        ルールの検証
 test/online-duo.test.mjs  オンライン 2 人戦の通し検証
 test/online-four.test.mjs オンライン 4 人戦の通し検証
@@ -95,33 +98,30 @@ test/online-four.test.mjs オンライン 4 人戦の通し検証
 
 ### オンライン対戦について
 
-対局中の盤面だけをプライベートな Vercel Blob に置き、**勝敗も棋譜もプレイヤー情報も保存しません。**
+対局中の盤面だけを部屋コードごとの Durable Object に置き、**勝敗も棋譜もプレイヤー情報も保存しません。**
 
 - 対局が終わって画面を離れると、その場で盤面を削除します
-- 消し損ねた部屋も、2 時間（終局後は 5 分）触られなければ次に読まれた時点で消えます
-- 読み取りは `useCache: false` で常に最新を取得し、書き込みは ETag による条件付き書き込みで
-  両者の同時着手による破損を防いでいます（読み取りの ETag は弱い形になることがあるので正規化しています）
+- 消し損ねた部屋も、2 時間（終局後は 5 分）触られなければ部屋自身の alarm で消えます
+- 同じ部屋への操作は 1 つずつ順番に処理されるので、同時着手でも盤面が壊れません
 - 着手はサーバ側でルールを一から検証しているので、クライアントを書き換えても不正な手は通りません
-- 書き込みがぶつかったら読み直してやり直すので、判断は必ず最新の盤面に対して行われます
 
 ## 開発
 
 ```bash
 npm install
 npm test           # ルールの検証（2 人戦・4 人戦）
-npm run test:online # 動いているサーバに対する通し検証
-npx vercel dev     # ローカルで API ごと動かす
+npx wrangler dev   # ローカルで API ごと動かす
+BLOCKS_URL=http://localhost:8787 npm run test:online
 ```
 
 `npm test` は通信を伴わないルールの検証で、盤・向き・合法手・終局・順位まで確かめます。
 `npm run test:online` は実際のサーバに本物のリクエストを投げ、部屋の作成から
 着手の権限、終局、後片付けまでを通します。既定では本番に向くので、
-別の環境を見るときは `BLOCKS_URL=http://localhost:3000 npm run test:online` のように指定します。
+別の環境を見るときは `BLOCKS_URL=http://localhost:8787 npm run test:online` のように指定します。
 
-初回だけ、Blob ストアの用意が必要です。
+Cloudflare にログインして公開するときは、次のコマンドを使います。用意する環境変数はありません。
 
 ```bash
-npx vercel link
-npx vercel blob create-store blocks-rooms --access private --yes
-npx vercel env pull .env.local
+npx wrangler login
+npx wrangler deploy
 ```
