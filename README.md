@@ -125,3 +125,10 @@ Cloudflare にログインして公開するときは、次のコマンドを使
 npx wrangler login
 npx wrangler deploy
 ```
+
+## 公開
+
+`main` に push すると Cloudflare が自動でビルドして公開します（Workers Builds）。
+ビルド工程は無いので、走るのは `npx wrangler deploy` だけです。
+
+手元から直接公開したいときは同じコマンドを打ちます。用意する環境変数はありません。
