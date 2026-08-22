@@ -128,7 +128,11 @@ npx wrangler deploy
 
 ## 公開
 
-`main` に push すると Cloudflare が自動でビルドして公開します（Workers Builds）。
+**`main` に push すれば公開されます。** それが唯一の手順です。
+Cloudflare が GitHub を見ていて、push のたびに公開し直します（Workers Builds）。
 ビルド工程は無いので、走るのは `npx wrangler deploy` だけです。
 
-手元から直接公開したいときは同じコマンドを打ちます。用意する環境変数はありません。
+用意する環境変数も secret も 1 つもありません。
+
+手元から `npx wrangler deploy` を直接打つこともできますが、それは GitHub 連携が
+壊れているときの逃げ道です。普段は push で済ませます。
