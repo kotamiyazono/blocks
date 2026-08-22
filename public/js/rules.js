@@ -362,6 +362,13 @@ export function cellsAtAnchor(v, pieceId, orientationIndex, anchor) {
   return shape.map(([r, c]) => [r + r0, c + c0]);
 }
 
+/** 仮置きの駒を dr/dc マスだけずらした先の anchor を返す。 */
+export function nudgeAnchor(v, pieceId, orientationIndex, anchor, dr, dc) {
+  const clamp = (x) => Math.min(Math.max(x, 0), v.size - 1);
+  const next = [clamp(anchor[0] + dr), clamp(anchor[1] + dc)];
+  return anchorForCells(cellsAtAnchor(v, pieceId, orientationIndex, next));
+}
+
 /**
  * 与えられたマスの組が、そのピースを回転・反転して得られる形と一致するか。
  * オンライン対戦でクライアントから送られてきた着手をサーバ側で検証するために使う。

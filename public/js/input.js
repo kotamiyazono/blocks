@@ -8,6 +8,7 @@
  *   駒をなぞる     → 駒を動かす
  *   駒をタップ     → 回転
  *   駒を長押し     → 反転
+ *   帯をなぞる     → 駒を相対移動
  */
 
 import { cellFromPoint, centeredPiece, centerPiece, updateTrayFocus } from './view.js';
@@ -15,13 +16,12 @@ import { variantOf } from './rules.js';
 import { state, canAct, currentGhost } from './session.js';
 import { $, $$, onGameScreen, toast } from './ui.js';
 import {
-  render,
-  updateBoard,
   setTrayTapHandler,
   trayOfPanel,
+  padOfPanel,
   playerOfTray,
 } from './render.js';
-import { selectPiece, rotateSelection, flipSelection, moveAnchor, clearSelection } from './moves.js';
+import { selectPiece, rotateSelection, flipSelection, moveAnchor, setAnchor, clearSelection } from './moves.js';
 
 /** タップと長押しの境目。これを超えて押し続けたら反転とみなす。 */
 const LONG_PRESS_MS = 420;
@@ -37,6 +37,7 @@ export function initInput(handlers) {
   actions = handlers;
   setTrayTapHandler(tapPiece);
   for (const isFar of [false, true]) setupCarousel(trayOfPanel(isFar));
+  setupTrackpads();
   setupBoard();
   setupKeyboard();
   setupPlaceButtons();
@@ -150,15 +151,6 @@ function attachRotateGestures(root, { find, accept }) {
 function setupBoard() {
   let drag = null;
 
-  const moveGhostTo = (rc) => {
-    // 初めて盤に置いた瞬間だけ、下の案内も言い換わるので全体を描き直す
-    const first = !state.sel.anchor;
-    state.sel.anchor = rc;
-    state.lastAnchor = rc;
-    if (first) render();
-    else updateBoard();
-  };
-
   board.addEventListener('pointerdown', (event) => {
     if (!canAct() || !state.sel) return;
 
@@ -188,7 +180,7 @@ function setupBoard() {
     };
 
     // 駒の外を触ったときは待たせずその場へ持ってくる
-    if (!onGhost) moveGhostTo(rc);
+    if (!onGhost) setAnchor(rc);
   });
 
   board.addEventListener('pointermove', (event) => {
@@ -201,7 +193,7 @@ function setupBoard() {
     }
 
     const rc = cellFromPoint(board, event.clientX, event.clientY, variantOf(state.game).size);
-    if (rc) moveGhostTo(rc);
+    if (rc) setAnchor(rc);
   });
 
   const endDrag = (event) => {
@@ -214,6 +206,63 @@ function setupBoard() {
 
   board.addEventListener('pointerup', endDrag);
   board.addEventListener('pointercancel', endDrag);
+}
+
+/* ==========================================================================
+   相対移動の帯
+   ========================================================================== */
+
+function setupTrackpads() {
+  for (const isFar of [false, true]) setupTrackpad(padOfPanel(isFar));
+}
+
+function setupTrackpad(pad) {
+  let drag = null;
+
+  pad.addEventListener('pointerdown', (event) => {
+    if (!canAct() || !state.sel) return;
+    if (drag || !state.sel.anchor) return;
+    event.preventDefault();
+    try { pad.setPointerCapture(event.pointerId); } catch { /* 続行してよい */ }
+    drag = {
+      id: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+      ax: 0,
+      ay: 0,
+      step: (board.getBoundingClientRect().width + parseFloat(getComputedStyle(board).columnGap))
+        / variantOf(state.game).size,
+    };
+    pad.classList.add('is-active');
+  });
+
+  pad.addEventListener('pointermove', (event) => {
+    if (!drag || event.pointerId !== drag.id) return;
+    if (!canAct() || !state.sel || !state.sel.anchor) {
+      drag = null;
+      pad.classList.remove('is-active');
+      return;
+    }
+    drag.ax += event.clientX - drag.x;
+    drag.ay += event.clientY - drag.y;
+    drag.x = event.clientX;
+    drag.y = event.clientY;
+    const dc = Math.trunc(drag.ax / drag.step);
+    const dr = Math.trunc(drag.ay / drag.step);
+    if (!dr && !dc) return;
+    drag.ax -= dc * drag.step;
+    drag.ay -= dr * drag.step;
+    moveAnchor(dr, dc);
+  });
+
+  const end = (event) => {
+    if (!drag || event.pointerId !== drag.id) return;
+    drag = null;
+    pad.classList.remove('is-active');
+  };
+  pad.addEventListener('pointerup', end);
+  pad.addEventListener('pointercancel', end);
+  pad.addEventListener('lostpointercapture', end);
 }
 
 /* ==========================================================================

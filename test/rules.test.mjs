@@ -2,7 +2,7 @@ import {
   VARIANTS, PIECE_IDS, PIECE_SIZE, TOTAL_SQUARES, ORIENTATIONS, extent,
   createGame, canPlace, legalMoves, hasLegalMove, applyMove,
   remainingSquares, result, isFirstMove, cellsAtAnchor, flippedOrientation,
-  matchesPiece, orientationIndexOf, anchorForCells, variantOf,
+  matchesPiece, orientationIndexOf, anchorForCells, nudgeAnchor, variantOf,
 } from '../public/js/rules.js';
 import { chooseMove } from '../public/js/ai.js';
 
@@ -271,6 +271,69 @@ check('反転を 2 回で元に戻る',
   PIECE_IDS.every(id => ORIENTATIONS[id].every((_, i) =>
     flippedOrientation(id, flippedOrientation(id, i)) === i)));
 check('X5 は反転しても同じ向き', flippedOrientation('X5', 0) === 0);
+
+/* ====================================================================== */
+console.log('\n== 相対移動（トラックパッド・矢印キー） ==');
+
+const nudgePieces = ['I1', 'I2', 'I5', 'L5', 'P5', 'F5', 'X5', 'Y5'];
+const cellsKey = (cells) => JSON.stringify(cells.map(([r, c]) => `${r},${c}`).sort());
+
+for (const [name, v] of Object.entries(VARIANTS)) {
+  let fixed = true;
+  let noDeadZone = true;
+  let reachesEdge = true;
+  let multiStep = true;
+
+  for (const id of nudgePieces) for (let oi = 0; oi < ORIENTATIONS[id].length; oi++) {
+    const points = [0, 1, Math.floor(v.size / 2), v.size - 2, v.size - 1];
+    const anchors = points.flatMap(r => points.map(c => [r, c]));
+
+    for (const anchor of anchors) {
+      const normalized = nudgeAnchor(v, id, oi, anchor, 0, 0);
+      const cells = cellsAtAnchor(v, id, oi, anchor);
+      fixed = fixed
+        && JSON.stringify(normalized) === JSON.stringify(anchorForCells(cells))
+        && cellsKey(cells) === cellsKey(cellsAtAnchor(v, id, oi, normalized));
+      fixed = fixed && JSON.stringify(normalized) === JSON.stringify(nudgeAnchor(v, id, oi, normalized, 0, 0));
+
+      for (const [dr, dc] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        let current = normalized;
+        let movedAfterStop = false;
+        let minR = Infinity, maxR = -Infinity, minC = Infinity, maxC = -Infinity;
+        for (let step = 0; step < v.size; step++) {
+          const before = cellsAtAnchor(v, id, oi, current);
+          const next = nudgeAnchor(v, id, oi, current, dr, dc);
+          const after = cellsAtAnchor(v, id, oi, next);
+          const changed = cellsKey(before) !== cellsKey(after);
+          if (!changed) movedAfterStop = true;
+          if (changed && movedAfterStop) noDeadZone = false;
+          current = next;
+          for (const [r, c] of after) {
+            minR = Math.min(minR, r); maxR = Math.max(maxR, r);
+            minC = Math.min(minC, c); maxC = Math.max(maxC, c);
+          }
+        }
+        const edge = dr > 0 ? maxR === v.size - 1 : dr < 0 ? minR === 0
+          : dc > 0 ? maxC === v.size - 1 : minC === 0;
+        reachesEdge = reachesEdge && edge;
+      }
+
+      for (const [dr, dc] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        for (const distance of [1, 2, 3]) {
+          let repeated = normalized;
+          for (let i = 0; i < distance; i++) repeated = nudgeAnchor(v, id, oi, repeated, dr, dc);
+          const direct = nudgeAnchor(v, id, oi, normalized, dr * distance, dc * distance);
+          multiStep = multiStep && JSON.stringify(repeated) === JSON.stringify(direct);
+        }
+      }
+    }
+  }
+
+  check(`${name}: 相対移動の不動点・冪等性`, fixed);
+  check(`${name}: 相対移動にデッドゾーンがない`, noDeadZone);
+  check(`${name}: 相対移動で四辺まで届く`, reachesEdge);
+  check(`${name}: 多マス移動が一マス刻みと一致`, multiStep);
+}
 
 /* ====================================================================== */
 console.log('\n== CPU ==');

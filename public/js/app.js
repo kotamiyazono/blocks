@@ -56,7 +56,6 @@ function beginGame(mode, options = {}) {
   state.myPlayer = options.myPlayer || 1;
   state.sel = null;
   state.selTurn = null;
-  state.lastAnchor = null;
   state.history = [];
   state.placeable = null;
   state.busy = false;
@@ -96,8 +95,6 @@ async function placeSelection() {
   const p = g.turn;
   const cells = cellsAtAnchor(v, state.sel.pieceId, state.sel.oi, state.sel.anchor);
   if (!canPlace(v, g.board, p, cells, isFirstMove(g, p))) return;
-
-  state.lastAnchor = state.sel.anchor;
 
   if (state.mode === 'online') {
     await placeOnline(state.sel.pieceId, cells);

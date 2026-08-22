@@ -138,6 +138,7 @@
 
   <!-- 向こう側のプレイヤー（対面対戦のときだけ表示。180°回転して相手から正しく見える） -->
   <div class="panel panel-far" data-owner="far" hidden>
+    <div class="trackpad" aria-hidden="true"></div>
     <div class="panel-row">
       <div class="panel-tools">
         <button class="icon-btn js-quit" aria-label="対局をやめる">✕</button>
@@ -172,6 +173,7 @@
 
   <!-- 手前のプレイヤー -->
   <div class="panel panel-near" data-owner="near">
+    <div class="trackpad" aria-hidden="true"></div>
     <div class="panel-row">
       <div class="panel-tools">
         <button class="icon-btn js-quit" aria-label="対局をやめる">✕</button>
@@ -198,6 +200,7 @@
     <ul class="rules-list">
       <li>下のピースを<b>横に流して</b>選びます。真ん中に来たものが今のピース。</li>
       <li>盤の上を<b>なぞって</b>置く場所を決めます。</li>
+      <li>盤に駒を出したあとは、<b>帯をなぞって</b>指で隠さず微調整できます。</li>
       <li>駒を<b>タップで回転</b>、<b>長押しで反転</b>。タップだけで全部の向きを一巡できます。</li>
     </ul>
     <button class="btn btn-primary" data-close-sheet>とじる</button>

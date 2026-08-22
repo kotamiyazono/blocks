@@ -49,6 +49,7 @@ function activeTray() {
 }
 
 export const trayOfPanel = (isFar) => $('.tray', isFar ? panelFar : panelNear);
+export const padOfPanel = (isFar) => $('.trackpad', isFar ? panelFar : panelNear);
 
 export function render() {
   const g = state.game;
@@ -157,7 +158,7 @@ function renderStatus() {
       ? '自分の色の印を覆うように盤をタップ'
       : '盤をタップして置く場所を決めます';
   } else {
-    hint = '駒をタップで回転・長押しで反転';
+    hint = '帯で微調整・駒をタップで回転・長押しで反転';
   }
   statusLine.innerHTML = `${who} ・ ${hint}`;
 }
@@ -171,6 +172,7 @@ export function updateBoard() {
   const ready = Boolean(ghost && ghost.valid) && !state.busy;
   for (const { node, player } of panelList()) {
     const mine = state.game.turn === player && canAct();
+    node.classList.toggle('has-ghost', mine && Boolean(ghost));
     $('.ctl-place', node).disabled = !(mine && ready);
   }
 }

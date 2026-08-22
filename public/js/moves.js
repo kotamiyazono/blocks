@@ -5,7 +5,7 @@
  * 盤に確定させる（＝手を進める）操作はここには無い。
  */
 
-import { ORIENTATIONS, flippedOrientation, variantOf } from './rules.js';
+import { ORIENTATIONS, flippedOrientation, nudgeAnchor, variantOf } from './rules.js';
 import { state, canAct, computeSelection } from './session.js';
 import { toast } from './ui.js';
 import { render, updateBoard } from './render.js';
@@ -35,6 +35,7 @@ export function rotateSelection() {
     return;
   }
   state.sel.oi = (state.sel.oi + 1) % orientations;
+  normalizeAnchor();
   render();
 }
 
@@ -48,19 +49,34 @@ export function flipSelection() {
     return;
   }
   state.sel.oi = flipped;
+  normalizeAnchor();
   render();
 }
 
-/** 矢印キーで一マスずつ動かす。 */
+function normalizeAnchor() {
+  if (!state.sel.anchor) return;
+  const v = variantOf(state.game);
+  state.sel.anchor = nudgeAnchor(v, state.sel.pieceId, state.sel.oi, state.sel.anchor, 0, 0);
+}
+
+function applyAnchor(from, dr, dc) {
+  const first = !state.sel.anchor;
+  const v = variantOf(state.game);
+  const next = nudgeAnchor(v, state.sel.pieceId, state.sel.oi, from, dr, dc);
+  state.sel.anchor = next;
+  if (first) render();
+  else updateBoard();
+}
+
+/** 盤をタップして仮置きの位置を決める。 */
+export function setAnchor(rc) {
+  if (state.sel && canAct()) applyAnchor(rc, 0, 0);
+}
+
+/** 矢印キーとトラックパッドで一マスずつ動かす。 */
 export function moveAnchor(dr, dc) {
   if (!state.sel || !canAct()) return;
 
   const size = variantOf(state.game).size;
-  const anchor = state.sel.anchor || [Math.floor(size / 2), Math.floor(size / 2)];
-  const clamp = (v) => Math.min(Math.max(v, 0), size - 1);
-  const next = [clamp(anchor[0] + dr), clamp(anchor[1] + dc)];
-
-  state.sel.anchor = next;
-  state.lastAnchor = next;
-  updateBoard();
+  applyAnchor(state.sel.anchor || [Math.floor(size / 2), Math.floor(size / 2)], dr, dc);
 }

@@ -23,6 +23,12 @@
   --shadow-1: 0 1px 2px rgb(0 0 0 / .05);
   --shadow-2: 0 8px 28px rgb(0 0 0 / .12);
   --tap: 44px;
+  --panel-pad: 4px;
+  --near-min: 18px;
+  --far-min: 4px;
+  --near-safe-pad: 8px;
+  --far-safe-pad: 4px;
+  --trackpad-h: 34px;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -41,7 +47,7 @@
 
 * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 
-html, body { height: 100%; }
+html, body { height: 100%; height: 100dvh; overscroll-behavior: none; }
 
 body {
   background: var(--bg);
@@ -51,7 +57,6 @@ body {
   line-height: 1.5;
   display: flex;
   flex-direction: column;
-  overscroll-behavior: none;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -225,7 +230,7 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
    対局画面
    -------------------------------------------------------------------------- */
 /* 盤面をできるだけ大きく取りたいので、周りの余白はぎりぎりまで削っている */
-.screen-game { gap: 2px; padding: 0 4px; }
+.screen-game { gap: 2px; padding: 0 4px; overflow: hidden; }
 
 .board-area {
   flex: 1;
@@ -325,7 +330,7 @@ body.mode-local .board-area { padding-top: 0; }
   display: flex;
   flex-direction: column;
   gap: 4px;
-  padding: 4px 0;
+  padding: var(--panel-pad) 0;
   transition: opacity .2s ease;
 }
 .panel-row {
@@ -351,17 +356,41 @@ body.mode-local .board-area { padding-top: 0; }
 /* 180° 回すので、画面の上端に空けたい余白は要素側では下に指定する */
 .panel-far {
   transform: rotate(180deg);
-  padding-bottom: calc(4px + env(safe-area-inset-top));
+  padding-bottom: max(var(--far-min), calc(var(--far-safe-pad) + env(safe-area-inset-top)));
 }
-.panel-near { padding-bottom: max(18px, calc(8px + env(safe-area-inset-bottom))); }
+.panel-near { padding-bottom: max(var(--near-min), calc(var(--near-safe-pad) + env(safe-area-inset-bottom))); }
 
 /* ホーム画面から起動したときは、下端の指の届きにくさが増すので余白を厚くする。
    env() が 0 を返す端末でも詰まらないよう max() で最低限を保証している。 */
 @media (display-mode: standalone), (display-mode: fullscreen) {
-  .panel-near { padding-bottom: max(30px, calc(18px + env(safe-area-inset-bottom))); }
-  .panel-far { padding-bottom: max(14px, calc(6px + env(safe-area-inset-top))); }
+  :root {
+    --near-min: 30px; --far-min: 14px;
+    --near-safe-pad: 18px; --far-safe-pad: 6px;
+  }
 }
 .panel.is-idle { opacity: .3; pointer-events: none; }
+
+/* 盤の上の駒を、指で駒を隠さずに動かすための帯。 */
+.trackpad {
+  flex: none;
+  height: var(--trackpad-h);
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  color: var(--mist);
+  background-color: var(--surface);
+  background-image: radial-gradient(circle, currentColor 1px, transparent 1.2px);
+  background-size: 7px 7px;
+  touch-action: none;
+  user-select: none;
+  opacity: .45;
+  transition: opacity .15s ease, background-color .15s ease, border-color .15s ease, color .15s ease;
+}
+.panel.has-ghost .trackpad { opacity: 1; }
+.trackpad.is-active {
+  color: var(--surface);
+  background-color: var(--ink);
+  border-color: var(--ink);
+}
 
 .ctl {
   border-radius: 12px;
@@ -442,16 +471,15 @@ body.mode-local .board-area { padding-top: 0; }
 
 /* 対面対戦は上下 2 つのパネルが入るぶん高さで頭打ちになる。
    付属物をひとまわり小さくして、その差をまるごと盤面に回す。 */
-body.mode-local { --tile: 52px; }
+body.mode-local { --tile: 52px; --panel-pad: 3px; --trackpad-h: 26px; }
 body.mode-local .tile-grid i { width: 6.5px; height: 6.5px; }
 body.mode-local .ctl-place { width: 58px; font-size: 13px; }
-body.mode-local .panel { gap: 5px; padding: 3px 0; }
 body.mode-local .status { min-height: 15px; font-size: 11px; }
 body.mode-local .score { padding: 3px 9px; }
 
 /* 縦の狭い端末ではさらに詰める */
 @media (max-height: 700px) {
-  body.mode-local { --tile: 46px; }
+  body.mode-local { --tile: 46px; --trackpad-h: 22px; }
   body.mode-local .tile-grid i { width: 5.5px; height: 5.5px; }
   body.mode-local .ctl-place { width: 54px; font-size: 12px; }
 }
@@ -625,7 +653,7 @@ body.mode-local .score { padding: 3px 9px; }
    縦長の端末では 100% のままなので、iPad の縦持ちでも画面幅いっぱいに使える。 */
 @media (min-width: 700px) {
   .screen-game { width: 100%; max-width: min(100%, 96vh); margin: 0 auto; }
-  :root { --tile: 76px; }
+  :root { --tile: 76px; --trackpad-h: 44px; }
   .tile-grid i { width: 11px; height: 11px; }
   .ctl-place { width: 84px; font-size: 16px; }
   .status { font-size: 14px; }
