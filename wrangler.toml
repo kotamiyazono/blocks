@@ -12,3 +12,7 @@ class_name = "Room"
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["Room"]
+
+[[routes]]
+pattern = "blocks.superblue.app"
+custom_domain = true

@@ -9,7 +9,7 @@ import { VARIANTS, legalMoves, isFirstMove } from '../public/js/rules.js';
 const V = VARIANTS.duo;
 
 // 既定は本番。別の環境に向けるときは BLOCKS_URL を指定する
-const BASE = process.env.BLOCKS_URL || 'https://blocks.kotamiyazono.workers.dev';
+const BASE = process.env.BLOCKS_URL || 'https://blocks.superblue.app';
 let failures = 0;
 const check = (name, cond, extra = '') => {
   console.log(cond ? `  ok   ${name}` : `  FAIL ${name} ${extra}`);
