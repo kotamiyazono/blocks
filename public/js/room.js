@@ -1,7 +1,7 @@
 /**
  * BLOCKS — オンライン対戦の段取り
  *
- * 部屋を作る・招待する・参加する・盤面を見に行く・ひとことを流す、までを受け持つ。
+ * 部屋を作る・招待する・参加する・盤面を同期する・ひとことを流す、までを受け持つ。
  * 対局そのものの進め方は知らないので、始める／終わるといった節目は
  * 起動時に渡してもらった手続きに任せている。
  */
@@ -9,13 +9,7 @@
 import {
   createRoom,
   joinRoom,
-  startRoom,
-  fetchRoom,
-  sendMove,
-  sendChat,
-  leaveRoom,
-  requestRematch,
-  RoomWatcher,
+  RoomSocket,
 } from './online.js';
 import { chooseMove } from './ai.js';
 
@@ -57,43 +51,43 @@ export function initRoom(handlers) {
 const inviteUrlFor = (code) => `${location.origin}${location.pathname}#${code}`;
 
 /* ==========================================================================
-   盤面を見に行き続ける
+   WebSocket 接続
    ========================================================================== */
 
-function startWatcher() {
-  stopWatcher();
-  const watcher = new RoomWatcher({
-    code: () => state.online.code,
-    since: () => state.online.seq,
-    onUpdate: onRoomUpdate,
+function connect() {
+  disconnect();
+  const socket = new RoomSocket({
+    code: state.online.code,
+    token: state.online.token,
+    onState: onRoomUpdate,
+    onChat: renderChatMessage,
     onError: (error) => {
-      if (error.status !== 404) {
-        toast(error.message);
-        return;
-      }
-      // 対局が終わったあとの部屋は時間で消える。結果を読んでいる最中に
-      // 邪魔をしたくないので、その場合は黙って見に行くのをやめる。
-      if (state.game && state.game.status === 'finished') return;
-      toast('部屋が閉じました');
+      state.busy = false;
+      el.startNow.disabled = false;
+      toast(error.message);
+      render();
+    },
+    onClosed: (event) => {
+      if (state.game?.status === 'finished') return;
+      toast(event.code === 4403 ? 'この対局の参加者として確認できませんでした' : '部屋が閉じました');
       hooks.goHome();
     },
   });
-  state.online.watcher = watcher;
-  watcher.start();
+  state.online.socket = socket;
+  socket.open();
 }
 
-export function stopWatcher() {
-  if (state.online && state.online.watcher) {
-    state.online.watcher.stop();
-    state.online.watcher = null;
-  }
+export function disconnect() {
+  state.online?.socket?.close();
+  if (state.online) state.online.socket = null;
 }
 
 /** サーバから受け取った部屋の状態を画面に反映する。 */
 function onRoomUpdate(data) {
-  if (!state.online || data.unchanged) return;
+  clearTimeout(moveTimer);
+  if (!state.online) return;
 
-  state.online.seq = data.seq;
+  state.busy = false;
   state.online.opponentJoined = Boolean(data.hasOpponent);
 
   // 盤面がまだ組み立てられていない画面（相手待ち・参加中）にいる場合
@@ -103,7 +97,9 @@ function onRoomUpdate(data) {
       return; // まだ人が揃っていない
     }
     startOnlineGame(data);
-    toast(data.seats > 2 ? '対局がはじまります' : '相手が参加しました');
+    if (data.seats > 2 || state.online.player === 1) {
+      toast(data.seats > 2 ? '対局がはじまります' : '相手が参加しました');
+    }
     return;
   }
 
@@ -141,11 +137,14 @@ function onRoomUpdate(data) {
   runCpuSeatIfHost();
 }
 
-const startOnlineGame = (data) => hooks.beginGame('online', {
-  game: data.game,
-  myPlayer: state.online.player,
-  cpuSeats: data.cpu || [],
-});
+const startOnlineGame = (data) => {
+  hooks.beginGame('online', {
+    game: data.game,
+    myPlayer: state.online.player,
+    cpuSeats: data.cpu || [],
+  });
+  renderChat(data.chat);
+};
 
 /** 相手待ちの画面に、埋まった席と主催者向けの開始ボタンを出す。 */
 function paintWaiting(data) {
@@ -165,9 +164,8 @@ const rememberSeat = (data) => {
     code: data.code,
     token: data.token,
     player: data.player,
-    seq: data.seq,
-    opponentJoined: Boolean(data.hasOpponent),
-    watcher: null,
+    opponentJoined: false,
+    socket: null,
   };
   state.myPlayer = data.player;
   saveRoom(state.online);
@@ -193,11 +191,7 @@ export function runCpuSeatIfHost() {
     const move = chooseMove(g, g.turn, 'normal');
     if (!move) return;
 
-    try {
-      onRoomUpdate(await sendMove(state.online.code, state.online.token, move.pieceId, move.cells));
-    } catch {
-      /* 失敗しても次のポーリングで状況を取り直す */
-    }
+    state.online.socket.send({ t: 'move', pieceId: move.pieceId, cells: move.cells });
   }, 700);
 }
 
@@ -205,26 +199,22 @@ export function runCpuSeatIfHost() {
    一手を送る
    ========================================================================== */
 
-export async function placeOnline(pieceId, cells) {
+let moveTimer = null;
+
+export function placeOnline(pieceId, cells) {
   state.busy = true;
   updateBoard();
-
-  try {
-    const data = await sendMove(state.online.code, state.online.token, pieceId, cells);
+  clearTimeout(moveTimer);
+  if (!state.online.socket.send({ t: 'move', pieceId, cells })) {
     state.busy = false;
-    onRoomUpdate(data);
-  } catch (error) {
-    state.busy = false;
-    toast(error.message);
-
-    // 盤面がずれている可能性があるので取り直す
-    if (error.status === 409 || error.status === 400) {
-      try {
-        onRoomUpdate(await fetchRoom(state.online.code));
-      } catch { /* 取り直しにも失敗したら次のポーリングに任せる */ }
-    }
+    toast('接続中です。もう一度お試しください');
     render();
+    return;
   }
+  moveTimer = setTimeout(() => {
+    state.busy = false;
+    render();
+  }, 5000);
 }
 
 /* ==========================================================================
@@ -234,7 +224,7 @@ export async function placeOnline(pieceId, cells) {
 
 let chatTimer = null;
 let chatPending = null;
-let lastChat = {};
+let lastSentChat = null;
 
 /**
  * 相手の行を今の内容に合わせる。自分の入力欄には触らない。
@@ -243,30 +233,31 @@ let lastChat = {};
 function renderChat(chat) {
   if (!chat || !state.online) return;
 
-  let someoneTyped = false;
   for (const row of el.chatThemRows.children) {
     const seat = Number(row.dataset.seat);
     const text = (chat[seat] || '').trim();
-
-    if (text !== (lastChat[seat] || '')) someoneTyped = true;
-    lastChat[seat] = text;
 
     row.classList.toggle('is-empty', text.length === 0);
     // 何も言っていない席は、誰の行なのかが分かるように名前を薄く出しておく
     row.querySelector('span').textContent = text || labelFor(seat);
   }
 
-  // 誰かが打ち込んでいる間は見に行く間隔を詰めて、文字が流れて見えるようにする
-  if (someoneTyped && state.online.watcher) state.online.watcher.hurry();
+}
+
+function renderChatMessage({ seat, text }) {
+  const row = [...el.chatThemRows.children].find((item) => Number(item.dataset.seat) === seat);
+  if (!row) return;
+  const value = text.trim();
+  row.classList.toggle('is-empty', value.length === 0);
+  row.querySelector('span').textContent = value || labelFor(seat);
 }
 
 function wireChat() {
   el.chatInput.addEventListener('input', () => {
     if (state.mode !== 'online' || !state.online) return;
     chatPending = el.chatInput.value;
-    if (state.online.watcher) state.online.watcher.hurry();
     clearTimeout(chatTimer);
-    chatTimer = setTimeout(flushChat, 350);
+    chatTimer = setTimeout(flushChat, 120);
   });
 
   el.chatInput.addEventListener('keydown', (event) => {
@@ -276,15 +267,12 @@ function wireChat() {
   });
 }
 
-async function flushChat() {
+function flushChat() {
   if (!state.online || chatPending === null) return;
   const text = chatPending;
   chatPending = null;
-  try {
-    onRoomUpdate(await sendChat(state.online.code, state.online.token, text));
-  } catch {
-    /* 届かなくても次に打った文字と一緒に送られる */
-  }
+  if (text === lastSentChat) return;
+  if (state.online.socket.send({ t: 'say', text })) lastSentChat = text;
 }
 
 /** 対局の開始時に、ひとこと欄を出すか下げるかを決める。 */
@@ -295,7 +283,7 @@ async function flushChat() {
 export function prepareChat(mode, myPlayer) {
   clearTimeout(chatTimer);
   chatPending = null;
-  lastChat = {};
+  lastSentChat = null;
   el.chatInput.value = '';
 
   el.chat.hidden = mode !== 'online';
@@ -336,9 +324,9 @@ function wireButtons() {
       rememberSeat(data);
 
       el.inviteUrl.value = inviteUrlFor(data.code);
-      paintWaiting(data);
+      paintWaiting({ seats: state.seatChoice, joined: 1 });
       showScreen('screen-waiting');
-      startWatcher();
+      connect();
     } catch (error) {
       el.onlineError.textContent = error.message;
     }
@@ -366,10 +354,8 @@ function wireButtons() {
 
   el.startNow.addEventListener('click', async () => {
     el.startNow.disabled = true;
-    try {
-      onRoomUpdate(await startRoom(state.online.code, state.online.token));
-    } catch (error) {
-      toast(error.message);
+    if (!state.online.socket.send({ t: 'start' })) {
+      toast('接続中です。もう一度お試しください');
       el.startNow.disabled = false;
     }
   });
@@ -404,48 +390,30 @@ export async function enterByCode(code) {
   el.joiningDots.hidden = false;
   el.joiningNote.textContent = '部屋に入っています…';
 
-  if (await resumeSeat(code)) return;
+  if (resumeSeat(code)) return;
 
   try {
     const data = await joinRoom(code);
     rememberSeat(data);
-
-    if (data.status === 'waiting') {
-      // 4 人戦でまだ揃っていない。他の人を待つ
-      el.inviteUrl.value = inviteUrlFor(code);
-      paintWaiting(data);
-      showScreen('screen-waiting');
-    } else {
-      startOnlineGame(data);
-    }
-    startWatcher();
+    el.inviteUrl.value = inviteUrlFor(code);
+    showScreen('screen-waiting');
+    connect();
   } catch (error) {
     showJoinError(error.message);
   }
 }
 
 /** すでにこの部屋の参加者なら、入り直さずに続きから。 */
-async function resumeSeat(code) {
+function resumeSeat(code) {
   const saved = loadRoom();
   if (!saved || saved.code !== code) return false;
 
-  try {
-    const data = await fetchRoom(code);
-    state.online = { ...saved, seq: data.seq, opponentJoined: Boolean(data.hasOpponent), watcher: null };
-    state.myPlayer = saved.player;
-
-    if (data.status === 'waiting') {
-      el.inviteUrl.value = inviteUrlFor(code);
-      paintWaiting(data);
-      showScreen('screen-waiting');
-    } else {
-      startOnlineGame(data);
-    }
-    startWatcher();
-    return true;
-  } catch {
-    return false; // 続きから入れなければ、新規参加として扱う
-  }
+  state.online = { ...saved, opponentJoined: false, socket: null };
+  state.myPlayer = saved.player;
+  el.inviteUrl.value = inviteUrlFor(code);
+  showScreen('screen-waiting');
+  connect();
+  return true;
 }
 
 function showJoinError(message) {
@@ -460,18 +428,17 @@ function showJoinError(message) {
    ========================================================================== */
 
 /** 同じ相手ともう一局。相手の画面にも新しい盤面が届く。 */
-export async function rematchOnline() {
-  const data = await requestRematch(state.online.code, state.online.token);
-  state.online.seq = data.seq;
-  startOnlineGame(data);
-  startWatcher();
+export function rematchOnline() {
+  if (!state.online.socket.send({ t: 'rematch' })) {
+    throw new Error('接続中です。もう一度お試しください');
+  }
 }
 
 /** 部屋から出る。盤面はもう要らないので消してもらう。 */
 export async function closeRoom() {
-  stopWatcher();
   if (state.online) {
-    await leaveRoom(state.online.code, state.online.token).catch(() => {});
+    state.online.socket?.send({ t: 'leave' });
+    disconnect();
   }
   clearRoom();
   state.online = null;

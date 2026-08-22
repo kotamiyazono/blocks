@@ -76,7 +76,7 @@ public/js/view.js          盤と持ちピースの DOM
 public/js/render.js        状態を画面に映す
 public/js/moves.js         駒の選択と向きの変更
 public/js/input.js         指とキーボード
-public/js/online.js        通信とポーリング
+public/js/online.js        通信と WebSocket の再接続
 public/js/room.js          オンライン対戦の段取り
 public/js/app.js           対局の進行と画面のつなぎ
 
@@ -85,6 +85,7 @@ worker/room.js       オンライン対戦の部屋（Durable Object）
 wrangler.toml        Worker と Durable Object の設定
 public/_headers      静的ファイルのキャッシュ設定
 test/rules.test.mjs        ルールの検証
+test/socket.mjs            WebSocket テストの補助
 test/online-duo.test.mjs  オンライン 2 人戦の通し検証
 test/online-four.test.mjs オンライン 4 人戦の通し検証
 ```
@@ -94,7 +95,7 @@ test/online-four.test.mjs オンライン 4 人戦の通し検証
 盤の下に 1 行だけの入力欄があります。**送信ボタンはなく、打っている文字がそのまま相手に流れていきます。**
 残るのは「いま言っていること」だけで、会話の履歴はどこにも持ちません。部屋を閉じれば一緒に消えます。
 
-打ち合っている間だけ通信の間隔が詰まるので、普段は無駄な通信をしません。
+盤面は Durable Object から変化したときだけ push されるので、待っている間も無駄なポーリングをしません。
 
 ### オンライン対戦について
 
@@ -103,6 +104,7 @@ test/online-four.test.mjs オンライン 4 人戦の通し検証
 - 対局が終わって画面を離れると、その場で盤面を削除します
 - 消し損ねた部屋も、2 時間（終局後は 5 分）触られなければ部屋自身の alarm で消えます
 - 同じ部屋への操作は 1 つずつ順番に処理されるので、同時着手でも盤面が壊れません
+- 対局中は Hibernation WebSocket で盤面を push し、ひとことだけを軽い差分メッセージで流します
 - 着手はサーバ側でルールを一から検証しているので、クライアントを書き換えても不正な手は通りません
 
 ## 開発
