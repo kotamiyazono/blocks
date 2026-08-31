@@ -24,7 +24,7 @@ import {
   playerOfPanel,
   computeSelection,
 } from './session.js';
-import { $, $$ } from './ui.js';
+import { $ } from './ui.js';
 
 const board = $('#board');
 const statusLine = $('#status');
@@ -124,9 +124,6 @@ function paintPanels() {
     });
     updateTrayFocus(tray);
   }
-
-  const canUndo = state.mode !== 'online' && state.history.length > 0;
-  for (const button of $$('.js-undo')) button.hidden = !canUndo;
 }
 
 function renderStatus() {

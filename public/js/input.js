@@ -31,10 +31,10 @@ const DRAG_SLOP = 8;
 const board = $('#board');
 
 /** 対局を進めるための処理は持ち主から渡してもらう。 */
-let actions = { place: () => {}, undo: () => {} };
+let onPlace = () => {};
 
-export function initInput(handlers) {
-  actions = handlers;
+export function initInput(place) {
+  onPlace = place;
   setTrayTapHandler(tapPiece);
   for (const isFar of [false, true]) setupCarousel(trayOfPanel(isFar));
   setupTrackpads();
@@ -296,9 +296,8 @@ function setupKeyboard() {
     ArrowRight: () => moveAnchor(0, 1),
     r: rotateSelection,
     f: flipSelection,
-    Enter: () => actions.place(),
-    ' ': () => actions.place(),
-    z: () => actions.undo(),
+    Enter: () => onPlace(),
+    ' ': () => onPlace(),
     Escape: clearSelection,
   };
 
@@ -322,7 +321,7 @@ function setupKeyboard() {
 function setupPlaceButtons() {
   for (const panel of $$('.panel')) {
     panel.addEventListener('click', (event) => {
-      if (event.target.closest('.ctl-place')) actions.place();
+      if (event.target.closest('.ctl-place')) onPlace();
     });
   }
 }

@@ -56,7 +56,6 @@ function beginGame(mode, options = {}) {
   state.myPlayer = options.myPlayer || 1;
   state.sel = null;
   state.selTurn = null;
-  state.history = [];
   state.placeable = null;
   state.busy = false;
   state.quitArmed = false;
@@ -99,7 +98,6 @@ async function placeSelection() {
   if (state.mode === 'online') {
     await placeOnline(state.sel.pieceId, cells);
   } else {
-    state.history.push(structuredClone(g));
     commit(applyMove(g, p, state.sel.pieceId, cells));
   }
 }
@@ -144,19 +142,6 @@ function scheduleCpu() {
     if (!move) return; // applyMove がパスを扱うのでここには来ない想定
     commit(applyMove(g, g.turn, move.pieceId, move.cells));
   }, 520);
-}
-
-function undo() {
-  if (state.mode === 'online' || state.history.length === 0) return;
-  clearTimeout(cpuTimer);
-
-  state.game = state.history.pop();
-  state.sel = null;
-  state.selTurn = null;
-  state.placeable = null;
-  hideResult();
-  render();
-  toast('一手もどしました');
 }
 
 /* ========================================================================
@@ -338,7 +323,6 @@ sheetRules.addEventListener('click', (event) => {
 });
 
 $('#btn-home').addEventListener('click', goHome);
-for (const button of $$('.js-undo')) button.addEventListener('click', undo);
 
 // 誤って対局を終わらせないよう、二度押しで確定させる
 for (const button of $$('.js-quit')) {
@@ -357,7 +341,7 @@ for (const button of $$('.js-quit')) {
    起動
    ======================================================================== */
 
-initInput({ place: placeSelection, undo });
+initInput(placeSelection);
 initRoom({ beginGame, goHome, showResult, notifyPass, hideResult });
 
 const invited = location.hash.replace('#', '').trim().toUpperCase();

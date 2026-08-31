@@ -25,7 +25,6 @@ export const state = {
   cpuSeats: [],        // CPU が受け持つ席
   sel: null,           // { pieceId, oi, anchor }
   selTurn: null,       // 選択がどの手番のものか（手番が変わったら捨てる）
-  history: [],         // 待った用（ひとり／対面のみ）
   placeable: null,     // { key, set } 置けるピースの一覧をキャッシュ
   busy: false,         // 送信中はボタンを止める
   online: null,        // { code, token, player, opponentJoined, socket }

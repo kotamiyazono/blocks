@@ -116,16 +116,6 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
 }
 .link-btn:active { opacity: .6; }
 
-.icon-btn {
-  width: 32px; height: 32px;
-  display: grid; place-items: center;
-  border-radius: 10px;
-  color: var(--mist);
-  font-size: 16px;
-}
-.icon-btn:active { background: var(--surface-2); }
-.icon-btn[hidden] { display: none; }
-
 .segmented {
   display: flex;
   gap: 4px;
@@ -345,18 +335,19 @@ body.mode-local .board-area::before { display: none; }
   gap: 6px;
 }
 
-/* やめる・待ったは使う頻度が低いので、縦に積んで細い列に収める。
+/* 対局をやめるボタン。使う頻度が低いので薄く置き、押した間だけはっきりさせる。
    対面ではパネルごと回るので、どちらの側からも自分の手元に来る。 */
-.panel-tools {
+.btn-quit {
   flex: 0 0 auto;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 2px;
-  width: 30px;
+  width: 30px; height: 26px;
+  display: grid; place-items: center;
+  border-radius: 10px;
+  color: var(--mist);
+  font-size: 14px;
+  opacity: .5;
 }
-.panel-tools .icon-btn { width: 30px; height: 26px; font-size: 14px; opacity: .5; }
-.panel-tools .icon-btn:active { opacity: 1; }
+.btn-quit:active { background: var(--surface-2); opacity: 1; }
+
 .panel[hidden] { display: none; }
 /* 180° 回すので、画面の上端に空けたい余白は要素側では下に指定する */
 .panel-far {
