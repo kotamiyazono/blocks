@@ -172,7 +172,6 @@ export function updateBoard() {
   const ready = Boolean(ghost && ghost.valid) && !state.busy;
   for (const { node, player } of panelList()) {
     const mine = state.game.turn === player && canAct();
-    node.classList.toggle('has-ghost', mine && Boolean(ghost));
     $('.ctl-place', node).disabled = !(mine && ready);
   }
 }

@@ -381,17 +381,13 @@ body.mode-local .board-area::before { display: none; }
   flex: 1 0 var(--trackpad-min);
   border-radius: 12px;
   border: 1px solid var(--line);
-  color: var(--line);
   background-color: var(--surface-2);
-  background-image: radial-gradient(circle, currentColor .9px, transparent 1.1px);
-  background-size: 9px 9px;
   touch-action: none;
   user-select: none;
-  transition: color .15s ease, background-color .15s ease, border-color .15s ease;
+  transition: border-color .15s ease;
 }
-.panel.has-ghost .trackpad { color: var(--mist); }
 /* 触れているのが分かる程度でよいので、枠線を少し濃くするだけ。地色は変えない */
-.panel .trackpad.is-active {
+.trackpad.is-active {
   border-color: color-mix(in srgb, var(--mist) 40%, var(--line));
 }
 
