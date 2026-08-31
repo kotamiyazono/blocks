@@ -19,6 +19,11 @@ const toastNode = $('#toast');
 let toastTimer = null;
 
 export function toast(message, ms = 2400) {
+  // 盤とパネルの境目に出す。出すたびに表示直前の位置を測る
+  // 対局画面が出ていないときは空にして、CSS 側の既定位置に任せる
+  const panel = $('#screen-game.is-active .panel-near');
+  document.body.style.setProperty('--toast-y', panel ? `${panel.getBoundingClientRect().top}px` : '');
+
   toastNode.textContent = message;
   toastNode.classList.add('is-shown');
   clearTimeout(toastTimer);

@@ -29,6 +29,7 @@
   --near-safe-pad: 8px;
   --far-safe-pad: 4px;
   --trackpad-min: 34px;
+  --ctl-w: 66px;       /* ✕ と「置く」の幅。左右で同じ大きさに見せる */
 }
 
 @media (prefers-color-scheme: dark) {
@@ -316,11 +317,11 @@ body.mode-local .board-area::before { display: none; }
    対面対戦では向かい側のパネルを 180° 回して、相手から正しく見えるようにする。
    盤面そのものは実物のブロックス同様、回さない。
    -------------------------------------------------------------------------- */
-/* 持ちピースと「置く」を 1 行にまとめて、その分を丸ごと盤面に回している。
+/* ✕と「置く」はトラックパッド行に置き、カルーセルは横幅いっぱいの別行にする。
+   縦方向の高さは増やさず、盤面を縮めない。
    回転と反転はボタンを置かず、駒へのタップと長押しで行う。 */
 .panel {
-  /* ここが縮むと持ちピースが画面の外に押し出されてしまう。
-     縮まないまま、余った高さは帯へ流して伸びる。 */
+  /* パネル自体は縮まず、余った高さは .panel-row が受け持って伸びる。 */
   flex: 1 0 auto;
   display: flex;
   flex-direction: column;
@@ -331,22 +332,23 @@ body.mode-local .board-area::before { display: none; }
 .panel-row {
   display: flex;
   flex-direction: row;
-  align-items: center;
   gap: 6px;
+  flex: 1 0 var(--trackpad-min);   /* .trackpad にあった伸長分をこの行が受け持つ */
 }
 
 /* 対局をやめるボタン。使う頻度が低いので薄く置き、押した間だけはっきりさせる。
-   対面ではパネルごと回るので、どちらの側からも自分の手元に来る。 */
+   対面ではパネルごと回るので、どちらの側からも自分の手元に来る。
+   見えているのは字だけなので、縦に伸びても見た目は重くならない。 */
 .btn-quit {
   flex: 0 0 auto;
-  width: 30px; height: 26px;
+  width: var(--ctl-w);
   display: grid; place-items: center;
   border-radius: 10px;
   color: var(--mist);
   font-size: 14px;
   opacity: .5;
 }
-.btn-quit:active { background: var(--surface-2); opacity: 1; }
+.btn-quit:active { opacity: 1; }
 
 .panel[hidden] { display: none; }
 /* 180° 回すので、画面の上端に空けたい余白は要素側では下に指定する */
@@ -367,10 +369,10 @@ body.mode-local .board-area::before { display: none; }
 .panel.is-idle { opacity: .3; pointer-events: none; }
 
 /* 盤の上の駒を、指で駒を隠さずに動かすための帯。
-   余っている縦のスペースはすべてここに流れてくる（.panel の flex-grow 経由）。 */
+   余っている縦のスペースは .panel-row に流れて、そこが伸びる。 */
 .trackpad {
   --pad-ink: var(--line);
-  flex: 1 0 var(--trackpad-min);
+  flex: 1;
   border-radius: 12px;
   border: 1px solid var(--pad-ink);
   background-color: var(--surface-2);
@@ -398,11 +400,11 @@ body.mode-local .board-area::before { display: none; }
 .ctl:active { transform: scale(.97); }
 .ctl:disabled { opacity: .42; cursor: default; }
 
-/* 持ちピースの右に添える確定ボタン。カルーセルと同じ高さにして 1 行に収める */
+/* なぞり終わった指のすぐ右に置く確定ボタン。高さは指定せず、
+   ✕・帯とまとめて行いっぱいに伸ばす。3 つの高さがそろうと操作の帯がひとつの塊に見える。 */
 .ctl-place {
   flex: 0 0 auto;
-  width: 66px;
-  height: calc(var(--tile) + 8px);
+  width: var(--ctl-w);
   font-size: 14px;
 }
 .ctl-place:not(:disabled) { background: var(--ink); border-color: var(--ink); color: var(--bg); }
@@ -415,11 +417,10 @@ body.mode-local .board-area::before { display: none; }
 :root { --tile: 66px; }
 
 .tray {
-  /* 中央の判定に offsetLeft を使うので、その基準をこの要素自身にしておく。
-     これが無いと、左に置いたボタン列のぶんだけ座標がずれる。 */
+  /* view.js が tile.offsetLeft を scrollLeft と同じ座標系で使うので、
+     offsetParent をこの要素自身にしておく。外すと中央の判定がずれる。 */
   position: relative;
-  flex: 1;
-  min-width: 0;
+  flex: none;
   display: flex;
   align-items: center;
   overflow-x: auto;
@@ -461,17 +462,17 @@ body.mode-local .board-area::before { display: none; }
 
 /* 対面対戦は上下 2 つのパネルが入るぶん高さで頭打ちになる。
    付属物をひとまわり小さくして、その差をまるごと盤面に回す。 */
-body.mode-local { --tile: 52px; --panel-pad: 3px; --trackpad-min: 26px; }
+body.mode-local { --tile: 52px; --panel-pad: 3px; --trackpad-min: 26px; --ctl-w: 58px; }
 body.mode-local .tile-grid i { width: 6.5px; height: 6.5px; }
-body.mode-local .ctl-place { width: 58px; font-size: 13px; }
+body.mode-local .ctl-place { font-size: 13px; }
 body.mode-local .status { min-height: 15px; font-size: 11px; }
 body.mode-local .score { padding: 3px 9px; }
 
 /* 縦の狭い端末ではさらに詰める */
 @media (max-height: 700px) {
-  body.mode-local { --tile: 46px; --trackpad-min: 22px; }
+  body.mode-local { --tile: 46px; --trackpad-min: 22px; --ctl-w: 54px; }
   body.mode-local .tile-grid i { width: 5.5px; height: 5.5px; }
-  body.mode-local .ctl-place { width: 54px; font-size: 12px; }
+  body.mode-local .ctl-place { font-size: 12px; }
 }
 
 /* --------------------------------------------------------------------------
@@ -617,8 +618,9 @@ body.mode-local .score { padding: 3px 9px; }
 .toast {
   position: fixed;
   left: 50%;
-  bottom: calc(24px + env(safe-area-inset-bottom));
-  transform: translate(-50%, 12px);
+  /* 盤とパネルの境目に出す。駒もボタンも隠さない位置。上端の座標は render.js が渡す */
+  top: var(--toast-y, 88%);
+  transform: translate(-50%, calc(-50% + 12px));
   z-index: 80;
   max-width: 88vw;
   padding: 11px 18px;
@@ -633,7 +635,7 @@ body.mode-local .score { padding: 3px 9px; }
   transition: opacity .2s ease, transform .2s ease;
   box-shadow: var(--shadow-2);
 }
-.toast.is-shown { opacity: 1; transform: translate(-50%, 0); }
+.toast.is-shown { opacity: 1; transform: translate(-50%, -50%); }
 
 /* --------------------------------------------------------------------------
    広い画面：盤面を大きくしすぎず中央に置く
@@ -643,9 +645,9 @@ body.mode-local .score { padding: 3px 9px; }
    縦長の端末では 100% のままなので、iPad の縦持ちでも画面幅いっぱいに使える。 */
 @media (min-width: 700px) {
   .screen-game { width: 100%; max-width: min(100%, 96vh); margin: 0 auto; }
-  :root { --tile: 76px; --trackpad-min: 44px; }
+  :root { --tile: 76px; --trackpad-min: 44px; --ctl-w: 84px; }
   .tile-grid i { width: 11px; height: 11px; }
-  .ctl-place { width: 84px; font-size: 16px; }
+  .ctl-place { font-size: 16px; }
   .status { font-size: 14px; }
   .chat-line { min-height: 34px; font-size: 15px; }
   .chat-mine input { font-size: 15px; }
