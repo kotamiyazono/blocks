@@ -21,7 +21,7 @@ import {
   padOfPanel,
   playerOfTray,
 } from './render.js';
-import { selectPiece, rotateSelection, flipSelection, moveAnchor, setAnchor, clearSelection } from './moves.js';
+import { selectPiece, rotateSelection, flipSelection, moveAnchor, setAnchor, ensureAnchor, clearSelection } from './moves.js';
 
 /** タップと長押しの境目。これを超えて押し続けたら反転とみなす。 */
 const LONG_PRESS_MS = 420;
@@ -231,7 +231,7 @@ function setupTrackpad(pad) {
 
   attachRotateGestures(pad, {
     find: () => pad,
-    accept: () => Boolean(state.sel),
+    accept: () => Boolean(state.sel?.anchor),
   });
 
   pad.addEventListener('pointerdown', (event) => {
@@ -251,6 +251,7 @@ function setupTrackpad(pad) {
       step: (board.getBoundingClientRect().width + parseFloat(getComputedStyle(board).columnGap))
         / variantOf(state.game).size,
     };
+    ensureAnchor();
     pad.classList.add('is-active');
   });
 
@@ -265,7 +266,6 @@ function setupTrackpad(pad) {
     drag.ay += event.clientY - drag.y;
     drag.x = event.clientX;
     drag.y = event.clientY;
-    if (!state.sel.anchor) return;
     const dc = Math.trunc(drag.ax / drag.step);
     const dr = Math.trunc(drag.ay / drag.step);
     if (!dr && !dc) return;

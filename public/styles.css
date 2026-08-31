@@ -391,9 +391,8 @@ body.mode-local .board-area::before { display: none; }
 }
 .panel.has-ghost .trackpad { color: var(--mist); }
 .panel .trackpad.is-active {
-  color: var(--bg);
-  background-color: var(--mist);
   border-color: var(--mist);
+  background-color: color-mix(in srgb, var(--mist) 10%, var(--surface-2));
 }
 
 .ctl {

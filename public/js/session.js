@@ -109,13 +109,14 @@ export function placeableSet() {
 /**
  * 持つピースを持ち替える。
  *
- * 置き場所はあえて決めない。ここで「置ける場所」を先回りして出すと、
- * 手番が来た瞬間から確定できる状態になってしまい、
- * 考えずに「置く」を押すだけで進んでしまう。どこに置くかは打つ人が決める。
+ * 置ける場所はあえて探さない。anchor は呼び手が決めた固定の初期位置(盤の中央)か、
+ * 同じ手番のうちに自分で決めた直前の位置。手番が回ってきただけのときは null を渡し、
+ * 盤には何も出さない。
  */
-export function computeSelection(pieceId) {
+export function computeSelection(pieceId, anchor = null) {
+  const keep = state.sel && state.selTurn === state.game.turn ? state.sel.anchor : null;
   state.selTurn = state.game.turn;
-  state.sel = { pieceId, oi: 0, anchor: null };
+  state.sel = { pieceId, oi: 0, anchor: keep || anchor };
 }
 
 /** 仮置きの見た目。置けない位置でも出して、なぜ置けないか分かるようにする。 */

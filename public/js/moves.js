@@ -10,9 +10,15 @@ import { state, canAct, computeSelection } from './session.js';
 import { toast } from './ui.js';
 import { render, updateBoard } from './render.js';
 
+/** 盤の中央。まだ置き場所を決めていない駒は、まずここに出す。 */
+const boardCenter = () => {
+  const size = variantOf(state.game).size;
+  return [Math.floor(size / 2), Math.floor(size / 2)];
+};
+
 export function selectPiece(pieceId) {
   if (!canAct()) return;
-  computeSelection(pieceId);
+  computeSelection(pieceId, boardCenter());
   render();
 }
 
@@ -73,10 +79,14 @@ export function setAnchor(rc) {
   if (state.sel && canAct()) applyAnchor(rc, 0, 0);
 }
 
+/** まだ盤に出ていなければ、盤の中央に出す。帯に触れた時点の入り口。 */
+export function ensureAnchor() {
+  if (!state.sel || !canAct() || state.sel.anchor) return;
+  applyAnchor(boardCenter(), 0, 0);
+}
+
 /** 矢印キーとトラックパッドで一マスずつ動かす。 */
 export function moveAnchor(dr, dc) {
   if (!state.sel || !canAct()) return;
-
-  const size = variantOf(state.game).size;
-  applyAnchor(state.sel.anchor || [Math.floor(size / 2), Math.floor(size / 2)], dr, dc);
+  applyAnchor(state.sel.anchor || boardCenter(), dr, dc);
 }

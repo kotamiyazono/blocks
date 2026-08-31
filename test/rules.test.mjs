@@ -5,6 +5,7 @@ import {
   matchesPiece, orientationIndexOf, anchorForCells, nudgeAnchor, variantOf,
 } from '../public/js/rules.js';
 import { chooseMove } from '../public/js/ai.js';
+import { state, computeSelection } from '../public/js/session.js';
 
 let failures = 0;
 const check = (name, cond, extra = '') => {
@@ -372,6 +373,33 @@ for (const [name, v] of Object.entries(VARIANTS)) {
   const easy = scoreOf('easy');
   const hard = scoreOf('hard');
   check(`つよい(${hard.toFixed(1)}) が やさしい(${easy.toFixed(1)}) より残りマスが少ない`, hard < easy);
+}
+
+/* ====================================================================== */
+console.log('\n== 選択の初期位置と引き継ぎ ==');
+{
+  const pieceId = 'I1';
+  const other = 'I2';
+  state.game = createGame('duo');
+  state.sel = null;
+  state.selTurn = null;
+  const center = Math.floor(variantOf(state.game).size / 2);
+  computeSelection(pieceId);
+  check('手番が来ただけでは出さない', state.sel.anchor === null);
+
+  computeSelection(pieceId, [center, center]);
+  check('選ぶと初期位置に出る', JSON.stringify(state.sel.anchor) === JSON.stringify([center, center]) && state.sel.oi === 0);
+
+  state.sel = { pieceId, oi: 3, anchor: [3, 4] };
+  state.selTurn = state.game.turn;
+  computeSelection(other, [center, center]);
+  check('同じ手番の持ち替えは位置を引き継ぎ向きは戻す',
+    JSON.stringify(state.sel.anchor) === '[3,4]' && state.sel.oi === 0);
+
+  state.selTurn = state.game.turn === 1 ? 2 : 1;
+  computeSelection(other, [center, center]);
+  check('手番が変わったら引き継がない',
+    JSON.stringify(state.sel.anchor) === JSON.stringify([center, center]) && state.sel.oi === 0);
 }
 
 console.log(failures === 0 ? '\n✅ すべて通過\n' : `\n❌ ${failures} 件失敗\n`);

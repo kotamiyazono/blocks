@@ -155,8 +155,8 @@ function renderStatus() {
     hint = 'このピースは今は置けません';
   } else if (!state.sel || !state.sel.anchor) {
     hint = isFirstMove(g, g.turn)
-      ? '自分の色の印を覆うように盤をタップ'
-      : '盤をタップして置く場所を決めます';
+      ? '帯をなぞるか盤をタップ。自分の色の印を覆う位置へ'
+      : '帯をなぞるか盤をタップして置く場所を決めます';
   } else {
     hint = '帯で動かす・駒か帯をタップで回転・長押しで反転';
   }
