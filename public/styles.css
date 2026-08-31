@@ -387,10 +387,9 @@ body.mode-local .board-area::before { display: none; }
   background-size: 9px 9px;
   touch-action: none;
   user-select: none;
-  transition: border-color .15s ease;
 }
 /* 触れているのが分かる程度でよいので、枠線とドットを少し濃くするだけ。地色は変えない */
-.trackpad.is-active { --pad-ink: color-mix(in srgb, var(--mist) 40%, var(--line)); }
+.trackpad.is-active { --pad-ink: color-mix(in srgb, var(--mist) 20%, var(--line)); }
 
 .ctl {
   border-radius: 12px;
