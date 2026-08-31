@@ -378,20 +378,19 @@ body.mode-local .board-area::before { display: none; }
 /* 盤の上の駒を、指で駒を隠さずに動かすための帯。
    余っている縦のスペースはすべてここに流れてくる（.panel の flex-grow 経由）。 */
 .trackpad {
+  --pad-ink: var(--line);
   flex: 1 0 var(--trackpad-min);
   border-radius: 12px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--pad-ink);
   background-color: var(--surface-2);
-  background-image: radial-gradient(circle, var(--line) .9px, transparent 1.1px);
+  background-image: radial-gradient(circle, var(--pad-ink) .9px, transparent 1.1px);
   background-size: 9px 9px;
   touch-action: none;
   user-select: none;
   transition: border-color .15s ease;
 }
-/* 触れているのが分かる程度でよいので、枠線を少し濃くするだけ。地色は変えない */
-.trackpad.is-active {
-  border-color: color-mix(in srgb, var(--mist) 40%, var(--line));
-}
+/* 触れているのが分かる程度でよいので、枠線とドットを少し濃くするだけ。地色は変えない */
+.trackpad.is-active { --pad-ink: color-mix(in srgb, var(--mist) 40%, var(--line)); }
 
 .ctl {
   border-radius: 12px;
