@@ -382,6 +382,8 @@ body.mode-local .board-area::before { display: none; }
   border-radius: 12px;
   border: 1px solid var(--line);
   background-color: var(--surface-2);
+  background-image: radial-gradient(circle, var(--line) .9px, transparent 1.1px);
+  background-size: 9px 9px;
   touch-action: none;
   user-select: none;
   transition: border-color .15s ease;
