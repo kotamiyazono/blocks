@@ -390,9 +390,9 @@ body.mode-local .board-area::before { display: none; }
   transition: color .15s ease, background-color .15s ease, border-color .15s ease;
 }
 .panel.has-ghost .trackpad { color: var(--mist); }
+/* 触れているのが分かる程度でよいので、枠線を少し濃くするだけ。地色は変えない */
 .panel .trackpad.is-active {
-  border-color: var(--mist);
-  background-color: color-mix(in srgb, var(--mist) 10%, var(--surface-2));
+  border-color: color-mix(in srgb, var(--mist) 40%, var(--line));
 }
 
 .ctl {
